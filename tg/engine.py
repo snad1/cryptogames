@@ -118,6 +118,9 @@ class BettingEngine:
         self.backoff_delay   = 1.0
         self._insufficient_balance = False
         self._fatal_error          = False
+        self._last_api_ms          = 0.0
+        self._api_ms_total         = 0.0
+        self._api_ms_count         = 0
 
         # ── strategy internals ──
         self.dalembert_unit  = 0
@@ -212,7 +215,9 @@ class BettingEngine:
         }
         url = f"{API_BASE}/v1/placebet/{self.currency}/{self.api_key}"
         try:
+            t0 = time.time()
             r = self._http.post(url, json=payload, timeout=REQUEST_TIMEOUT)
+            self._last_api_ms = (time.time() - t0) * 1000
             self._consecutive_timeouts = 0
 
             if r.status_code == 200:
@@ -234,6 +239,9 @@ class BettingEngine:
                         return None
                     self.last_error = f"API error: {str(err_msg)[:120]}"
                     return None
+                # Track API timing
+                self._api_ms_total += self._last_api_ms
+                self._api_ms_count += 1
                 # Generate new client seed for next bet
                 self.client_seed = _gen_client_seed()
                 return data
@@ -666,6 +674,8 @@ class BettingEngine:
             "currency": self.currency.upper(),
             "status": self.status,
             "last_error": self.last_error,
+            "api_ms": self._last_api_ms,
+            "api_avg_ms": (self._api_ms_total / self._api_ms_count) if self._api_ms_count > 0 else 0,
         }
 
     # ── BETTING LOOP ─────────────────────────────────────
