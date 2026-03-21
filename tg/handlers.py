@@ -638,9 +638,18 @@ async def _monitor_loop(msg, user_id: int, slot: int, interval: int):
             engine = active_engines.get(user_id, {}).get(slot)
             if not engine or not engine.running:
                 try:
-                    await msg.edit_text(
-                        "Session ended. Monitor stopped.",
-                        reply_markup=None)
+                    reason = getattr(engine, "stop_reason", "") if engine else ""
+                    status = engine.get_status() if engine else None
+                    if status:
+                        summary = format_stop(status)
+                        if reason:
+                            summary += f"\n*Reason:* {reason}"
+                        await msg.edit_text(summary, parse_mode="Markdown", reply_markup=None)
+                    else:
+                        text = "Session ended."
+                        if reason:
+                            text += f"\n*Reason:* {reason}"
+                        await msg.edit_text(text, parse_mode="Markdown", reply_markup=None)
                 except Exception:
                     pass
                 break

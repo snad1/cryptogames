@@ -117,6 +117,7 @@ class BettingEngine:
         self._consecutive_timeouts = 0
         self.backoff_delay   = 1.0
         self._insufficient_balance = False
+        self._fatal_error          = False
 
         # ── strategy internals ──
         self.dalembert_unit  = 0
@@ -216,14 +217,20 @@ class BettingEngine:
 
             if r.status_code == 200:
                 data = r.json()
-                if "error" in data or "Error" in data:
-                    err_msg = data.get("error", data.get("Error", ""))
+                # Check for error/rejection in any key format the API uses
+                err_msg = data.get("error") or data.get("Error") or data.get("Message") or data.get("message")
+                if err_msg and "Roll" not in data:
                     if isinstance(err_msg, dict):
                         err_msg = err_msg.get("message", str(err_msg))
                     err_str = str(err_msg).lower()
                     if "insufficient" in err_str or "balance" in err_str:
                         self.last_error = "Insufficient balance"
                         self._insufficient_balance = True
+                        return None
+                    # Fatal rejections that won't resolve by retrying
+                    if any(kw in err_str for kw in ["invalid bet", "invalid amount", "minimum", "maximum"]):
+                        self.last_error = f"Rejected: {str(err_msg)[:120]}"
+                        self._fatal_error = True
                         return None
                     self.last_error = f"API error: {str(err_msg)[:120]}"
                     return None
@@ -698,7 +705,21 @@ class BettingEngine:
                     self._flush_bets()
                     self._db_save_session(final=True)
                     break
+                if self._fatal_error:
+                    self.running = False
+                    self.stop_reason = self.last_error
+                    self.status = f"STOPPED: {self.stop_reason}"
+                    self._flush_bets()
+                    self._db_save_session(final=True)
+                    break
                 self.consecutive_errors += 1
+                if self.consecutive_errors >= 10:
+                    self.running = False
+                    self.stop_reason = f"Too many consecutive errors: {self.last_error}"
+                    self.status = f"STOPPED: {self.stop_reason}"
+                    self._flush_bets()
+                    self._db_save_session(final=True)
+                    break
                 self.backoff_delay = min(self.backoff_delay * 2, 30.0)
                 time.sleep(self.backoff_delay)
                 continue
