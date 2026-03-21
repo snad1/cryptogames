@@ -170,7 +170,25 @@ class BettingEngine:
         return float(data.get("Balance", 0))
 
     def api_get_all_balances(self) -> dict:
-        """Fetch balances for all supported coins. Returns {coin: balance}."""
+        """Fetch balances for all supported coins via /v1/BalanceAll."""
+        url = f"{API_BASE}/v1/BalanceAll/{self.api_key}"
+        try:
+            r = self._http.get(url, timeout=REQUEST_TIMEOUT)
+            r.raise_for_status()
+            data = r.json()
+            if isinstance(data, dict):
+                return {k: float(v) for k, v in data.items() if float(v) > 0}
+            if isinstance(data, list):
+                balances = {}
+                for item in data:
+                    coin = item.get("Coin", "")
+                    bal = float(item.get("Balance", 0))
+                    if bal > 0:
+                        balances[coin.upper()] = bal
+                return balances
+        except Exception as e:
+            logger.warning("BalanceAll failed (%s), falling back to per-coin", e)
+        # Fallback: fetch individually
         from .config import CURRENCIES
         balances = {}
         for coin in CURRENCIES:
@@ -186,8 +204,8 @@ class BettingEngine:
         """Place a bet via CryptoGames API."""
         under_over = self.rule == "under"  # true = under, false = over
         payload = {
-            "Bet": f"{amount:.8f}",
-            "Payout": f"{self.multiplier}",
+            "Bet": round(amount, 8),
+            "Payout": round(self.multiplier, 4),
             "UnderOver": under_over,
             "ClientSeed": self.client_seed,
         }

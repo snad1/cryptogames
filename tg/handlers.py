@@ -201,7 +201,12 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         engine = BettingEngine(user_id, "", api_key, {})
         balances = engine.api_get_all_balances()
         if not balances:
-            await update.message.reply_text("No balances found or API key invalid.")
+            await update.message.reply_text(
+                "No balances found.\n\n"
+                "Check that your API key is correct:\n"
+                "`/setkey <your_key>`\n\n"
+                "Get your key from crypto.games Account > API Keys.",
+                parse_mode="Markdown")
             return
 
         lines = ["*Balances:*"]
@@ -209,7 +214,7 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"`{cur:>6}  {amt:.8f}`")
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
     except Exception as e:
-        await update.message.reply_text(f"Error: `{e}`", parse_mode="Markdown")
+        await update.message.reply_text(f"Error fetching balances: `{e}`", parse_mode="Markdown")
 
 
 # ── /config ──────────────────────────────────────────────
