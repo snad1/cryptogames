@@ -307,6 +307,12 @@ async def cmd_set(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if param == "currency":
+            if value.lower() not in CURRENCIES:
+                coins = ", ".join(c.upper() for c in CURRENCIES)
+                await update.message.reply_text(
+                    f"Unsupported currency: `{value}`\n\nAvailable: {coins}",
+                    parse_mode="Markdown")
+                return
             config["currency"] = value.lower()
         elif param == "strategy":
             name = value.lower().replace("-", "").replace(" ", "").replace("_", "")
