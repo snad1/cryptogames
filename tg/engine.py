@@ -457,8 +457,16 @@ class BettingEngine:
         return ""
 
     # ── LIFECYCLE ────────────────────────────────────────
+    def api_get_settings(self, coin: str = None) -> dict:
+        """Fetch coin settings (min bet, max win, house edge)."""
+        coin = coin or self.currency
+        url = f"{API_BASE}/v1/settings/{coin}"
+        r = self._http.get(url, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        return r.json()
+
     def start(self) -> bool:
-        """Connect, fetch balance, start betting thread."""
+        """Connect, fetch balance, validate min bet, start betting thread."""
         try:
             bal = self.api_get_balance()
         except Exception as e:
@@ -468,6 +476,20 @@ class BettingEngine:
         if bal <= 0:
             self.last_error = f"No {self.currency.upper()} balance found"
             return False
+
+        # Validate base bet against coin minimum
+        try:
+            settings = self.api_get_settings()
+            min_bet = float(settings.get("MinBet", 0))
+            if min_bet > 0 and self.base_bet < min_bet:
+                self.last_error = (
+                    f"Base bet {self.base_bet:.8f} is below minimum "
+                    f"{min_bet:.8f} {self.currency.upper()}. "
+                    f"Use /set basebet {min_bet}"
+                )
+                return False
+        except Exception:
+            pass  # non-fatal, proceed anyway
 
         init_db(self.db_path)
         migrate_db(self.db_path)
