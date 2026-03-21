@@ -25,8 +25,8 @@ logger = logging.getLogger("cryptogames")
 
 # ── Supported currencies ─────────────────────────────────
 CURRENCIES = [
-    "btc", "eth", "ltc", "doge", "xrp", "bch", "dash", "etc",
-    "neo", "steem", "sbd", "gas", "ppc", "ftc", "btg",
+    "btc", "eth", "usdt", "xrp", "bnb", "sol", "usdc", "doge",
+    "shib", "ltc", "bch", "pepe", "etc", "pol", "play",
 ]
 
 # ── Config keys persisted per user ───────────────────────
