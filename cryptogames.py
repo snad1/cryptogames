@@ -1113,6 +1113,183 @@ def _ask_optional(prompt_text: str, current) -> str:
     return raw
 
 
+def _edit_one_rule(old: StrategyRule):
+    """Edit an existing rule part-by-part. Returns updated StrategyRule, _BACK, or None."""
+    r = StrategyRule.from_dict(old.to_dict())
+    act_label = next((v[1] for v in RULE_ACTIONS.values() if v[0] == r.action), r.action)
+
+    while True:
+        console.print()
+        console.print(f"    [bold]{r.description}[/]")
+        console.print()
+
+        parts = []
+        if r.cond_type == "sequence":
+            mode_label = dict(every="Every N", every_streak="Every streak of N",
+                              first_streak="First streak of N",
+                              streak_above="Streak above N", streak_below="Streak below N").get(r.cond_mode, r.cond_mode)
+            parts.append(("Condition",  r.cond_type.title()))
+            parts.append(("Mode",       mode_label))
+            parts.append(("N value",    str(int(r.cond_value))))
+            parts.append(("Event",      r.cond_trigger))
+        elif r.cond_type == "profit":
+            op_sym = dict(gte=">=", gt=">", lte="<=", lt="<").get(r.cond_mode, r.cond_mode)
+            parts.append(("Condition",  r.cond_type.title()))
+            parts.append(("Field",      r.cond_field))
+            parts.append(("Operator",   op_sym))
+            parts.append(("Value",      str(r.cond_value)))
+        elif r.cond_type == "bet":
+            op_sym = dict(gte=">=", gt=">", lte="<=", lt="<").get(r.cond_mode, r.cond_mode)
+            parts.append(("Condition",  r.cond_type.title()))
+            parts.append(("Field",      r.cond_field))
+            parts.append(("Operator",   op_sym))
+            parts.append(("Value",      str(r.cond_value)))
+
+        act_label = next((v[1] for v in RULE_ACTIONS.values() if v[0] == r.action), r.action)
+        parts.append(("Action",     act_label))
+        if r.action_value:
+            parts.append(("Action value", str(r.action_value)))
+
+        for i, (label, val) in enumerate(parts, 1):
+            console.print(f"      [bold yellow][{i}][/] {label:14s} [cyan]{val}[/]")
+        save_n = len(parts) + 1
+        replace_n = save_n + 1
+        console.print(f"      [bold yellow][{save_n}][/] [green]Save changes[/]")
+        console.print(f"      [bold yellow][{replace_n}][/] [yellow]Rebuild from scratch[/]")
+
+        valid = [str(i) for i in range(1, replace_n + 1)]
+        pick = _ask("    Edit which part?", default=str(save_n), choices=valid)
+        if pick is _BACK:
+            return _BACK
+        pick = int(pick)
+
+        if pick == save_n:
+            r.description = _describe_rule(r)
+            return r
+
+        if pick == replace_n:
+            console.print("    [dim]Building replacement rule…[/]")
+            replacement = _build_one_rule()
+            if replacement is _BACK:
+                continue
+            return replacement
+
+        label = parts[pick - 1][0]
+
+        if label == "Condition":
+            console.print("      [dim]Change condition type:[/]")
+            for k, name in COND_TYPES.items():
+                tag = {"sequence": "Sequence", "profit": "Profit / Loss / Balance",
+                       "bet": "Bet properties"}.get(name, name)
+                console.print(f"        [bold yellow][{k}][/] {tag}")
+            cur_key = next((k for k, v in COND_TYPES.items() if v == r.cond_type), "1")
+            ct = _ask("      Type", default=cur_key, choices=list(COND_TYPES.keys()))
+            if ct is _BACK:
+                continue
+            new_type = COND_TYPES[ct]
+            if new_type != r.cond_type:
+                r.cond_type = new_type
+                if new_type == "sequence":
+                    r.cond_field = ""
+                    r.cond_mode = "every"
+                    r.cond_value = 1.0
+                    r.cond_trigger = "win"
+                elif new_type == "profit":
+                    r.cond_field = "profit"
+                    r.cond_mode = "gte"
+                    r.cond_value = 0.0
+                    r.cond_trigger = ""
+                elif new_type == "bet":
+                    r.cond_field = "amount"
+                    r.cond_mode = "gte"
+                    r.cond_value = 0.0
+                    r.cond_trigger = ""
+
+        elif label == "Mode":
+            console.print("      [dim]Sequence mode:[/]")
+            for k, (_, ml) in SEQ_MODES.items():
+                console.print(f"        [bold yellow][{k}][/] {ml}")
+            cur_key = next((k for k, v in SEQ_MODES.items() if v[0] == r.cond_mode), "1")
+            sm = _ask("      Mode", default=cur_key, choices=list(SEQ_MODES.keys()))
+            if sm is _BACK:
+                continue
+            r.cond_mode = SEQ_MODES[sm][0]
+
+        elif label == "N value":
+            nv = _ask("      N value", default=str(int(r.cond_value)))
+            if nv is _BACK:
+                continue
+            try:
+                r.cond_value = float(nv)
+            except ValueError:
+                console.print("      [red]Invalid number[/]")
+
+        elif label == "Event":
+            console.print("        [bold yellow][1][/] win  [bold yellow][2][/] loss  [bold yellow][3][/] bet")
+            cur_key = {"win": "1", "loss": "2", "bet": "3"}.get(r.cond_trigger, "1")
+            st = _ask("      Event", default=cur_key, choices=["1", "2", "3"])
+            if st is _BACK:
+                continue
+            r.cond_trigger = SEQ_TRIGGERS[st]
+
+        elif label == "Field":
+            if r.cond_type == "profit":
+                console.print("        [bold yellow][1][/] profit  [bold yellow][2][/] loss  [bold yellow][3][/] balance")
+                cur_key = next((k for k, v in PROFIT_FIELDS.items() if v == r.cond_field), "1")
+                pf = _ask("      Field", default=cur_key, choices=list(PROFIT_FIELDS.keys()))
+                if pf is _BACK:
+                    continue
+                r.cond_field = PROFIT_FIELDS[pf]
+            elif r.cond_type == "bet":
+                for k, name in BET_FIELDS.items():
+                    console.print(f"        [bold yellow][{k}][/] {name}")
+                cur_key = next((k for k, v in BET_FIELDS.items() if v == r.cond_field), "1")
+                bf = _ask("      Field", default=cur_key, choices=list(BET_FIELDS.keys()))
+                if bf is _BACK:
+                    continue
+                r.cond_field = BET_FIELDS[bf]
+
+        elif label == "Operator":
+            for k, (_, sym) in CMP_OPS.items():
+                console.print(f"        [bold yellow][{k}][/] {sym}")
+            cur_key = next((k for k, v in CMP_OPS.items() if v[0] == r.cond_mode), "1")
+            op = _ask("      Operator", default=cur_key, choices=list(CMP_OPS.keys()))
+            if op is _BACK:
+                continue
+            r.cond_mode = CMP_OPS[op][0]
+
+        elif label == "Value":
+            vl = _ask("      Value", default=str(r.cond_value))
+            if vl is _BACK:
+                continue
+            try:
+                r.cond_value = float(vl)
+            except ValueError:
+                console.print("      [red]Invalid number[/]")
+
+        elif label == "Action":
+            console.print("      [dim]Change action:[/]")
+            for k, (_, al) in RULE_ACTIONS.items():
+                console.print(f"        [bold yellow][{k:>2}][/] {al}")
+            cur_key = next((k for k, v in RULE_ACTIONS.items() if v[0] == r.action), "1")
+            ak = _ask("      Action", default=cur_key, choices=list(RULE_ACTIONS.keys()))
+            if ak is _BACK:
+                continue
+            new_action = RULE_ACTIONS[ak][0]
+            if new_action != r.action:
+                r.action = new_action
+                r.action_value = 0.0
+
+        elif label == "Action value":
+            av = _ask("      Action value", default=str(r.action_value))
+            if av is _BACK:
+                continue
+            try:
+                r.action_value = float(av)
+            except ValueError:
+                console.print("      [red]Invalid number[/]")
+
+
 def _build_one_rule():
     """Interactive builder for a single rule. Returns StrategyRule, _BACK, or None."""
     console.print("  [bold cyan]── New Rule ──[/]")
@@ -1481,6 +1658,31 @@ def setup_wizard():
                         if rule is not None:
                             state.custom_rules.append(rule)
                             console.print(f"    [green]Rule {len(state.custom_rules)}:[/] {rule.description}\n")
+
+                    elif v2 == "2":
+                        if len(state.custom_rules) == 1:
+                            idx = 0
+                        else:
+                            en = _ask(f"  Rule # to edit (1-{len(state.custom_rules)})")
+                            if en is _BACK:
+                                continue
+                            try:
+                                idx = int(en) - 1
+                                if not (0 <= idx < len(state.custom_rules)):
+                                    console.print("    [red]Invalid rule number[/]")
+                                    continue
+                            except ValueError:
+                                console.print("    [red]Enter a number[/]")
+                                continue
+                        old = state.custom_rules[idx]
+                        console.print(f"    [dim]Editing:[/] {old.description}")
+                        replacement = _edit_one_rule(old)
+                        if replacement is _BACK:
+                            continue
+                        if replacement is not None:
+                            state.custom_rules[idx] = replacement
+                            console.print(f"    [green]Updated:[/] {replacement.description}\n")
+
                     elif v2 == "3":
                         if len(state.custom_rules) == 1:
                             idx = 0
@@ -2014,28 +2216,118 @@ def cmd_status():
     wr = (d["wins"] / d["total_bets"] * 100) if d.get("total_bets") else 0
     uptime = str(timedelta(seconds=d.get("uptime_sec", 0)))
 
+    # extract all fields
+    bets = d.get("total_bets", 0)
+    wins = d.get("wins", 0)
+    losses = d.get("losses", 0)
+    hi_bal = d.get("highest_balance", 0)
+    lo_bal = d.get("lowest_balance", 0)
+    hi_win = d.get("highest_win", 0)
+    big_loss = d.get("biggest_loss", 0)
+    bpm = d.get("bets_per_minute", 0)
+    bps = d.get("bets_per_second", 0)
+    pk_bps = int(d.get("peak_bps", 0))
+    lw_bps = int(d.get("low_bps", 0))
+    pk_bpm = int(d.get("peak_bpm", 0))
+    lw_bpm = int(d.get("low_bpm", 0))
+    start_bal = d.get("start_balance", 0)
+    cur_bal = d.get("current_balance", 0)
+    avg_pnl = p / bets if bets > 0 else 0
+    avg_c = "green" if avg_pnl >= 0 else "red"
+    avg_s = "+" if avg_pnl >= 0 else ""
+    cs = d.get("current_streak", 0)
+    if cs > 0:
+        sk_now = f"W+{cs}"
+    elif cs < 0:
+        sk_now = f"L{cs}"
+    else:
+        sk_now = "—"
+
     console.print(Rule(f"[bold cyan]CryptoGames Session #{d.get('session_id', '?')}  {status}[/]"))
+
+    # ── Session Info ──
+    strat_str = f"{d.get('strategy', '?')}  {d.get('multiplier', '?')}x  {d.get('rule', '?')}"
+    sk = d.get("strategy_key", "")
+    if sk in ("2", "6", "7"):
+        strat_str += f"  [dim](loss mult: {d.get('loss_mult', '?')}x)[/]"
+    elif sk in ("3", "5"):
+        strat_str += f"  [dim](win mult: {d.get('win_mult', '?')}x)[/]"
 
     rows = [
         ("Uptime",         uptime),
         ("Currency",       d.get("currency", "?").upper()),
-        ("Strategy",       f"{d.get('strategy', '?')}  {d.get('multiplier', '?')}x  {d.get('rule', '?')}"),
+        ("Strategy",       strat_str),
         ("Base / Current", f"{d.get('base_bet', 0):.8f} / {d.get('current_bet', 0):.8f}"),
-        ("Balance",        f"{d.get('start_balance', 0):.8f} → {d.get('current_balance', 0):.8f}"),
+        ("Highest Bet",    f"{d.get('highest_bet', 0):.8f}"),
+    ]
+
+    delay = d.get("bet_delay", 0)
+    if delay:
+        rows.append(("Bet Delay",     f"{delay}s"))
+
+    rows += [
+        ("Balance",        f"{start_bal:.8f} → {cur_bal:.8f}"),
+        ("Peak / Low",     f"[green]{hi_bal:.8f}[/] / [red]{lo_bal:.8f}[/]"),
         ("Profit",         f"[{pc}]{ps}{p:.8f}[/]"),
         ("Wagered",        f"{d.get('wagered', 0):.8f}"),
-        ("Bets",           str(d.get("total_bets", 0))),
-        ("Wins / Losses",  f"[green]{d.get('wins', 0)}[/] / [red]{d.get('losses', 0)}[/]"),
+        ("Avg P/L",        f"[{avg_c}]{avg_s}{avg_pnl:.8f}[/] per bet"),
+        ("Bets",           str(bets)),
+        ("Wins / Losses",  f"[green]{wins}[/] / [red]{losses}[/]"),
         ("Win Rate",       f"{wr:.1f}%"),
+        ("Current Streak", sk_now),
         ("Best Streaks",   f"W+{d.get('max_win_streak', 0)}  L-{d.get('max_loss_streak', 0)}"),
-        ("Speed",          f"{d.get('bets_per_second', 0):.1f}/s  {d.get('bets_per_minute', 0):.0f}/m"),
+        ("Best Win",       f"[green]+{hi_win:.8f}[/]"),
+        ("Worst Loss",     f"[red]-{big_loss:.8f}[/]"),
+        ("Speed",          f"{bps:.1f}/s  {bpm:.0f}/m  Range: {lw_bps}-{pk_bps}/s  {lw_bpm}-{pk_bpm}/m"),
+        ("Rate Limit",     f"{d.get('rate_remaining', '?')}/{d.get('rate_limit', '?')}"),
+    ]
+
+    # ── Stop Conditions ──
+    stop_parts = []
+    mp = d.get("max_profit")
+    if mp is not None:
+        stop_parts.append(f"Profit >= {mp}")
+    ml = d.get("max_loss")
+    if ml is not None:
+        stop_parts.append(f"Loss >= {ml}")
+    mb = d.get("max_bets")
+    if mb is not None:
+        stop_parts.append(f"Bets >= {mb}")
+    mw = d.get("max_wins")
+    if mw is not None:
+        stop_parts.append(f"Wins >= {mw}")
+    sb = d.get("stop_on_balance")
+    if sb is not None:
+        stop_parts.append(f"Balance <= {sb}")
+    if stop_parts:
+        rows.append(("Stop Conditions", " | ".join(stop_parts)))
+    else:
+        rows.append(("Stop Conditions", "[dim]None set[/]"))
+
+    # Profit increment
+    pi = d.get("profit_increment")
+    pt = d.get("profit_threshold")
+    if pi and pt:
+        rows.append(("Profit Bump",   f"+{pi:.8f} every {pt} profit"))
+
+    rows += [
         ("Last Status",    d.get("status", "")[:80]),
         ("Updated",        d.get("updated_at", "?").replace("T", " ")),
     ]
+
     for k, v in rows:
         console.print(f"  [dim]{k:18s}[/] {v}")
     if d.get("last_error"):
         console.print(f"  [dim]{'Last Error':18s}[/] [red]{d['last_error'][:60]}[/]")
+
+    # ── Rule-Based rules ──
+    rc = d.get("rule_count", 0)
+    if rc > 0:
+        console.print()
+        console.print(f"  [yellow]Rules ({rc}):[/]")
+        for i, desc in enumerate(d.get("rule_descriptions", []), 1):
+            console.print(f"    [dim]{i}.[/] {desc}")
+
     console.print()
 
 
@@ -2072,12 +2364,16 @@ def cmd_list_presets():
 
 
 def cmd_stats():
+    """Show all-time session statistics."""
     if not os.path.exists(DB_PATH):
         console.print("[yellow]No database found.[/]")
         return
     conn = _db_conn()
+
+    # session list — fetch all columns
     rows = conn.execute("""
-        SELECT id, started_at, ended_at, UPPER(currency), strategy, multiplier, base_bet,
+        SELECT id, started_at AS started, ended_at AS ended,
+               UPPER(currency) AS cur, strategy, multiplier, base_bet,
                total_bets, wins, losses, profit, wagered,
                start_balance, end_balance,
                max_win_streak, max_loss_streak,
@@ -2096,16 +2392,54 @@ def cmd_stats():
             profit, wagered, start_bal, end_bal, mws, mls, \
             hi_bal, lo_bal, hi_win, big_loss, \
             bpm, bps, s_peak_bps, s_low_bps, s_peak_bpm, s_low_bpm = r
-        bets = bets or 0; wins = wins or 0; losses = losses or 0
-        profit = profit or 0; wagered = wagered or 0
+        bets = bets or 0
+        wins = wins or 0
+        losses = losses or 0
+        profit = profit or 0
+        wagered = wagered or 0
+        start_bal = start_bal or 0
+        end_bal = end_bal or 0
+        mws = mws or 0
+        mls = mls or 0
+        mult = mult or 0
+        base = base or 0
+        hi_bal = hi_bal or 0
+        lo_bal = lo_bal or 0
+        hi_win = hi_win or 0
+        big_loss = big_loss or 0
+        bpm = bpm or 0
+        bps = bps or 0
+        s_peak_bps = int(s_peak_bps or 0)
+        s_low_bps = int(s_low_bps or 0)
+        s_peak_bpm = int(s_peak_bpm or 0)
+        s_low_bpm = int(s_low_bpm or 0)
         pc = "green" if profit >= 0 else "red"
         ps = "+" if profit >= 0 else ""
         wr = f"{wins/bets*100:.1f}%" if bets > 0 else "—"
+        avg_pnl = profit / bets if bets > 0 else 0
+        avg_c = "green" if avg_pnl >= 0 else "red"
+        avg_s = "+" if avg_pnl >= 0 else ""
 
-        console.print(f"  [bold cyan]Session #{sid}[/]  [dim]{(started or '?').replace('T', ' ')} → {(ended or 'running').replace('T', ' ')}[/]")
-        console.print(f"    [dim]Currency:[/] {cur or '?'}  [dim]Strategy:[/] {strat or '?'}  [dim]Payout:[/] {mult or 0}x  [dim]Base:[/] {base or 0:.8f}")
+        # compute uptime
+        uptime_str = ""
+        try:
+            t0 = datetime.fromisoformat(started) if started else None
+            t1 = datetime.fromisoformat(ended) if ended else datetime.now()
+            if t0:
+                delta = int((t1 - t0).total_seconds())
+                h, rem = divmod(max(delta, 0), 3600)
+                m, s = divmod(rem, 60)
+                uptime_str = f"  [dim]Uptime:[/] {h}h {m}m {s}s"
+        except Exception:
+            pass
+
+        console.print(f"  [bold cyan]Session #{sid}[/]  [dim]{(started or '?').replace('T', ' ')} → {(ended or 'running').replace('T', ' ')}[/]{uptime_str}")
+        console.print(f"    [dim]Currency:[/] {cur or '?'}  [dim]Strategy:[/] {strat or '?'}  [dim]Mult:[/] {mult}x  [dim]Base:[/] {base:.8f}")
         console.print(f"    [dim]Bets:[/] {bets}  [dim]W:[/] [green]{wins}[/]  [dim]L:[/] [red]{losses}[/]  [dim]WR:[/] {wr}")
-        console.print(f"    [dim]Profit:[/] [{pc}]{ps}{profit:.8f}[/]  [dim]Wagered:[/] {wagered:.8f}")
+        console.print(f"    [dim]Speed:[/] {bps:.1f} avg/s  {bpm:.0f} avg/m  [dim]BPS:[/] {s_low_bps}-{s_peak_bps}/s  [dim]BPM:[/] {s_low_bpm}-{s_peak_bpm}/m")
+        console.print(f"    [dim]Profit:[/] [{pc}]{ps}{profit:.8f}[/]  [dim]Wagered:[/] {wagered:.8f}  [dim]Avg P/L:[/] [{avg_c}]{avg_s}{avg_pnl:.8f}[/]")
+        console.print(f"    [dim]Balance:[/] {start_bal:.8f} → {end_bal:.8f}  [dim]Peak:[/] [green]{hi_bal:.8f}[/]  [dim]Low:[/] [red]{lo_bal:.8f}[/]")
+        console.print(f"    [dim]Streaks:[/] W+{mws}  L-{mls}  [dim]Best Win:[/] [green]+{hi_win:.8f}[/]  [dim]Worst Loss:[/] [red]-{big_loss:.8f}[/]")
         console.print()
 
     # totals
@@ -2113,23 +2447,43 @@ def cmd_stats():
         SELECT COUNT(*), COALESCE(SUM(total_bets),0), COALESCE(SUM(wins),0),
                COALESCE(SUM(losses),0), COALESCE(SUM(profit),0), COALESCE(SUM(wagered),0),
                COALESCE(MAX(max_win_streak),0), COALESCE(MAX(max_loss_streak),0),
-               COALESCE(MAX(profit),0), COALESCE(MIN(profit),0)
+               COALESCE(MAX(profit),0), COALESCE(MIN(profit),0),
+               COALESCE(MAX(total_bets),0), COALESCE(AVG(total_bets),0),
+               COALESCE(MAX(highest_balance),0), COALESCE(MAX(highest_win),0),
+               COALESCE(MAX(biggest_loss),0), COALESCE(AVG(bets_per_minute),0),
+               COALESCE(MAX(peak_bps),0), COALESCE(MAX(peak_bpm),0),
+               COALESCE(AVG(bets_per_second),0)
         FROM sessions
     """).fetchone()
     conn.close()
 
     sessions, tot_bets, tot_wins, tot_losses, tot_profit, tot_wagered, \
-        best_ws, best_ls, best_profit, worst_profit = totals
+        best_ws, best_ls, best_profit, worst_profit, max_bets, avg_bets, \
+        all_hi_bal, all_hi_win, all_big_loss, avg_bpm, \
+        all_peak_bps, all_peak_bpm, avg_bps = totals
     pc = "green" if tot_profit >= 0 else "red"
     ps = "+" if tot_profit >= 0 else ""
     wr = f"{tot_wins/tot_bets*100:.1f}%" if tot_bets > 0 else "—"
+    bp_c = "green" if best_profit >= 0 else "red"
+    wp_c = "green" if worst_profit >= 0 else "red"
+    avg_pnl = tot_profit / tot_bets if tot_bets > 0 else 0
+    avg_pc = "green" if avg_pnl >= 0 else "red"
+    avg_ps = "+" if avg_pnl >= 0 else ""
 
     console.print(Rule("[bold cyan]All-Time Totals[/]"))
     console.print(f"  [dim]Sessions:[/]      {sessions}")
     console.print(f"  [dim]Total Bets:[/]    {tot_bets}  (W {tot_wins} / L {tot_losses}  WR {wr})")
     console.print(f"  [dim]Wagered:[/]       {tot_wagered:.8f}")
     console.print(f"  [dim]Profit:[/]        [{pc}]{ps}{tot_profit:.8f}[/]")
+    console.print(f"  [dim]Avg P/L:[/]       [{avg_pc}]{avg_ps}{avg_pnl:.8f}[/] per bet")
+    console.print(f"  [dim]Best Session:[/]  [{bp_c}]+{best_profit:.8f}[/]")
+    console.print(f"  [dim]Worst Session:[/] [{wp_c}]{worst_profit:.8f}[/]")
+    console.print(f"  [dim]Peak Balance:[/]  {all_hi_bal:.8f}")
+    console.print(f"  [dim]Best Win:[/]      [green]+{all_hi_win:.8f}[/]")
+    console.print(f"  [dim]Worst Loss:[/]    [red]-{all_big_loss:.8f}[/]")
     console.print(f"  [dim]Best Streaks:[/]  W+{best_ws}  L-{best_ls}")
+    console.print(f"  [dim]Speed:[/]         {avg_bps:.1f} avg/s  {avg_bpm:.0f} avg/m  [dim]Peak:[/] {int(all_peak_bps)}/s  {int(all_peak_bpm)}/m")
+    console.print(f"  [dim]Bets/Session:[/]  Max {max_bets}  Avg {avg_bets:.0f}")
     console.print()
 
 
@@ -2175,6 +2529,31 @@ def cmd_last_bets(n: int):
         )
     console.print(t)
     console.print()
+
+
+def _compute_streak_distribution(conn, session_id: int) -> dict:
+    """Compute streak distribution from bets table.
+    Returns {"win": {streak_len: count, ...}, "loss": {streak_len: count, ...}}"""
+    rows = conn.execute(
+        "SELECT state FROM bets WHERE session_id=? ORDER BY id", (session_id,)
+    ).fetchall()
+    dist = {"win": {}, "loss": {}}
+    if not rows:
+        return dist
+    cur_type = None
+    cur_len = 0
+    for (st,) in rows:
+        kind = "win" if st == "win" else "loss"
+        if kind == cur_type:
+            cur_len += 1
+        else:
+            if cur_type and cur_len > 0:
+                dist[cur_type][cur_len] = dist[cur_type].get(cur_len, 0) + 1
+            cur_type = kind
+            cur_len = 1
+    if cur_type and cur_len > 0:
+        dist[cur_type][cur_len] = dist[cur_type].get(cur_len, 0) + 1
+    return dist
 
 
 def cmd_session_bets(session_id: int):
