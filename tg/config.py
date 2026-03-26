@@ -4,6 +4,7 @@ import os
 import logging
 
 # ── Environment ──────────────────────────────────────────
+APP_ENV    = os.environ.get("APP_ENV", "production")
 BOT_TOKEN  = os.environ.get("CRYPTOGAMES_TG_TOKEN", "")
 DATA_DIR   = os.environ.get("CRYPTOGAMES_TG_DATA", os.path.expanduser("~/.cryptogames_tg"))
 API_BASE   = os.environ.get("CRYPTOGAMES_API_BASE", "https://api.crypto.games")
