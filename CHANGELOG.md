@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.0.2 — Stats, Status, Rule Editor & Web Fixes (2026-03-26)
+
+### CLI Bot v1.0.2
+
+#### Added
+
+- **Enhanced `cmd_stats()`** — Full per-session details: speed (BPS/BPM peak/low), balance extremes, average P/L, uptime; plus an all-time totals section across all sessions
+- **Enhanced `cmd_status()`** — Full 30-metric display including stop conditions, active rules, speed ranges, and win/loss streaks
+- **`_compute_streak_distribution()`** — Per-session bet analysis for win/loss streak frequency; used in stats and session detail views
+- **`_edit_one_rule()` interactive rule editor** — Edit existing rules in-place via the setup wizard; wired into the main configuration flow
+
+### TG Bot v1.0.2
+
+#### TG Bot Added
+
+- **`tg/strategy.py` re-export module** — Thin re-export so Telegram bot imports strategy helpers from the shared core without path hacks
+
+### Web Admin v1.0.2
+
+#### Web Admin Added
+
+- **`web/static/app.css`** — Main stylesheet for the web admin UI (was missing, causing unstyled pages)
+- **`web/static/app.js`** — Main frontend JS for the web admin UI (was missing, causing non-functional pages)
+- **`web/static/chart.js`** — Chart helper used by the balance chart view (was missing)
+- **`web/.env.testing`** — Test environment config for running web tests against the testing database
+
+---
+
 ## v1.0.1 — Data Retention & Cleanup (2026-03-24)
 
 ### TG Bot v1.0.1
