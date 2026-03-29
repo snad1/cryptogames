@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.3 — Security Hardening (2026-03-29)
+
+### TG Bot v1.0.3
+
+#### Security
+
+- **ENV-controlled error messages** — Error handlers now log full details server-side and show user-friendly messages in production. Controlled via `APP_ENV` environment variable
+- **`cgctl` self-update safety** — Script wrapped in `{ }` block to prevent parse errors when `cmd_update` replaces the file mid-run
+
+---
+
 ## v1.0.2 — Stats, Status, Rule Editor & Web Fixes (2026-03-26)
 
 ### CLI Bot v1.0.2
