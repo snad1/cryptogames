@@ -49,6 +49,15 @@ cp tg/formatter.py  "$INSTALL_DIR/tg/"
 cp tg/handlers.py   "$INSTALL_DIR/tg/"
 cp tg/bot.py        "$INSTALL_DIR/tg/"
 
+# Copy shared/ library (cross-bot shared modules)
+if [ -d "../shared" ]; then
+    rm -rf "$INSTALL_DIR/shared"
+    cp -r ../shared "$INSTALL_DIR/"
+    echo "   shared/ library copied"
+else
+    echo "   ⚠ ../shared/ not found — shared imports may fail"
+fi
+
 # ── 3. Environment file ───────────────────────────────
 echo "[3/7] Setting up environment…"
 if [ ! -f "$ENV_FILE" ]; then
@@ -178,8 +187,9 @@ echo ""
 echo "  PROJECT STRUCTURE:"
 echo "    $INSTALL_DIR/"
 echo "    ├── cryptogames.py       CLI bot (TUI dashboard)"
-echo "    ├── core/                Shared: strategy, DB schema"
+echo "    ├── core/                Bot-specific: strategy, DB, engine"
 echo "    ├── tg/                  Telegram bot package"
+echo "    ├── shared/              Cross-bot shared library"
 echo "    ├── .env                 Environment config (tokens)"
 echo "    └── venv/                Python virtual environment"
 echo ""
