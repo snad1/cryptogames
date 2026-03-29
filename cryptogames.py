@@ -56,7 +56,7 @@ STATE_PATH   = os.environ.get("CRYPTOGAMES_STATE_PATH",   os.path.expanduser("~/
 PID_PATH     = os.environ.get("CRYPTOGAMES_PID_PATH",     os.path.expanduser("~/.cryptogames_autobot.pid"))
 PRESET_PATH  = os.environ.get("CRYPTOGAMES_PRESET_PATH",  os.path.expanduser("~/.cryptogames_presets.json"))
 LOG_DIR      = os.environ.get("CRYPTOGAMES_LOG_DIR",      os.path.expanduser("~/.cryptogames_logs"))
-VERSION      = "1.0.6"
+VERSION      = "1.0.7"
 APP_ENV      = os.environ.get("APP_ENV", "production")
 
 # ── Daily rotating logger ──
@@ -619,7 +619,7 @@ def betting_loop():
             elapsed = now - state.session_start
             if elapsed > 0:
                 state.bets_per_second = state.total_bets / elapsed
-                state.bets_per_minute = state._bets_this_min
+                state.bets_per_minute = state.bets_per_second * 60
 
             # track peak/low bets per individual second and minute
             sec_key = int(now)
