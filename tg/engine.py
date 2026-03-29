@@ -494,7 +494,7 @@ class BettingEngine:
             self.last_error = f"Connection failed: {e}"
             return False
 
-        if bal <= 0:
+        if bal <= 0 and self.base_bet > 0:
             self.last_error = f"No {self.currency.upper()} balance found"
             return False
 
