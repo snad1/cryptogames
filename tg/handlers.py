@@ -315,25 +315,25 @@ async def cmd_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Currency: `{(config.get('currency') or 'doge').upper()}`",
             f"Strategy: `{strategy}`",
             f"Rule: `{config.get('rule') or 'under'}`",
-            f"Payout: `{multiplier}x` ({wc}% win chance)",
+            f"Payout: `{multiplier:.2f}x` ({wc}% win chance)",
             f"Base bet: `{float(config.get('base_bet') or 0.01):.8f}`",
         ]
 
         if strategy_key in ("2", "7"):
-            lines.append(f"Loss mult: `{float(config.get('loss_mult') or 2.0)}x`")
+            lines.append(f"Loss mult: `{float(config.get('loss_mult') or 2.0):.2f}x`")
         if strategy_key in ("3", "5"):
-            lines.append(f"Win mult: `{float(config.get('win_mult') or 1.0)}x`")
+            lines.append(f"Win mult: `{float(config.get('win_mult') or 1.0):.2f}x`")
         if strategy_key == "7":
             lines.append(f"Delay threshold: `{int(config.get('delay_martin_threshold') or 3)}`")
 
         lines.append(f"Bet delay: `{float(config.get('bet_delay') or 0)}s`")
 
         stops = []
-        if config.get("max_profit"): stops.append(f"Max profit: {config['max_profit']}")
-        if config.get("max_loss"):   stops.append(f"Max loss: {config['max_loss']}")
+        if config.get("max_profit"): stops.append(f"Max profit: {float(config['max_profit']):.8f}")
+        if config.get("max_loss"):   stops.append(f"Max loss: {float(config['max_loss']):.8f}")
         if config.get("max_bets"):   stops.append(f"Max bets: {config['max_bets']}")
         if config.get("max_wins"):   stops.append(f"Max wins: {config['max_wins']}")
-        if config.get("stop_on_balance"): stops.append(f"Min balance: {config['stop_on_balance']}")
+        if config.get("stop_on_balance"): stops.append(f"Min balance: {float(config['stop_on_balance']):.8f}")
         if stops:
             lines.append(f"Stop: `{', '.join(stops)}`")
         else:
@@ -653,7 +653,7 @@ async def cmd_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await msg.edit_text(
         f"Session #{engine.session_id}{slot_info} started!\n\n"
         f"Strategy: `{engine.strategy}`\n"
-        f"Payout: `{engine.multiplier}x` ({wc}%)\n"
+        f"Payout: `{engine.multiplier:.2f}x` ({wc}%)\n"
         f"Base bet: `{engine.base_bet:.8f} {engine.currency.upper()}`\n"
         f"Balance: `{engine.current_balance:.8f} {engine.currency.upper()}`"
         f"{rec_info}\n\n"
@@ -763,7 +763,7 @@ async def _recurring_restart(chat_id: int, user_id: int, old_slot: int,
         chat_id,
         f"Recurring session #{engine.session_id} started!\n\n"
         f"Strategy: `{engine.strategy}`\n"
-        f"Payout: `{engine.multiplier}x` ({wc}%)\n"
+        f"Payout: `{engine.multiplier:.2f}x` ({wc}%)\n"
         f"Base bet: `{engine.base_bet:.8f} {engine.currency.upper()}`\n"
         f"Balance: `{engine.current_balance:.8f} {engine.currency.upper()}`\n"
         f"Recurring: `{rec_data['delay'] if rec_data else delay}s`\n\n"
