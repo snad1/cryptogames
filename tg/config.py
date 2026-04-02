@@ -24,6 +24,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cryptogames")
 
+# Suppress noisy httpx request logs (Telegram polling etc)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 # ── Supported currencies ─────────────────────────────────
 CURRENCIES = [
     "btc", "eth", "usdt", "xrp", "bnb", "sol", "usdc", "doge",
