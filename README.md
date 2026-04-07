@@ -1,4 +1,4 @@
-# CryptoGames AutoBot v1.1.1 + Telegram Bot v1.1.1
+# CryptoGames AutoBot v1.1.2 + Telegram Bot v1.1.2
 
 High-speed auto-betting engine for crypto.games Dice with a live dashboard, Telegram bot, and web admin panel. Runs on any server or local machine — leave it running and manage via CLI, Telegram, or browser.
 
