@@ -342,6 +342,10 @@ class BettingEngine:
                     self._rate_limit_wait = float(r.headers.get("Retry-After", 0))
                 except (ValueError, TypeError):
                     self._rate_limit_wait = 0.0
+                logger.warning("User %d: HTTP 429 on bet #%d (Retry-After=%s, body=%s)",
+                               self.user_id, self.total_bets + 1,
+                               r.headers.get("Retry-After", "n/a"),
+                               (r.text or "")[:120])
             else:
                 body = r.text or ""
                 if "insufficient" in body.lower():
@@ -349,9 +353,12 @@ class BettingEngine:
                     self._insufficient_balance = True
                 else:
                     self._set_error("Bet request failed", f"HTTP {r.status_code}: {body[:120]}")
-        except (httpx.TimeoutException, httpx.ConnectError):
+        except (httpx.TimeoutException, httpx.ConnectError) as te:
             self._consecutive_timeouts += 1
             self._set_error("Connection timeout — retrying")
+            logger.warning("User %d: bet #%d %s (#%d streak)",
+                           self.user_id, self.total_bets + 1,
+                           type(te).__name__, self._consecutive_timeouts)
             if self._consecutive_timeouts >= MAX_TIMEOUT_STREAK:
                 logger.warning("User %d: %d consecutive timeouts — recreating HTTP client",
                                self.user_id, self._consecutive_timeouts)
@@ -999,6 +1006,10 @@ class BettingEngine:
                         break
                     delay = self._rate_limit_wait if self._rate_limit_wait > 0 else min(2 ** (self._consecutive_429 - 1), 30.0)
                     self._rate_limit_total_wait += delay
+                    self.status = (f"Rate limited (429 #{self._consecutive_429}) — "
+                                   f"waiting {delay:.0f}s (total {self._rate_limit_total_wait:.0f}s)")
+                    logger.warning("User %d: 429 #%d — waiting %.1fs (cumulative %.0fs/1800s)",
+                                   self.user_id, self._consecutive_429, delay, self._rate_limit_total_wait)
                     await asyncio.sleep(delay)
                     continue
                 self.consecutive_errors += 1

@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.4.3 — Visible 429 logging + status updates (2026-05-11)
+
+### Fixed
+
+- **429s were happening silently** — `_set_error` only logged when a `technical` argument was passed, but the 429 handler called it with only the friendly message. Result: bot retried 429s invisibly while the dashboard kept showing "Placing bet #N..." with no logs explaining what was happening.
+  - Every 429 now logs immediately: `HTTP 429 on bet #N (Retry-After=X, body=…)`.
+  - During the 429 backoff wait, `self.status` updates to e.g. `Rate limited (429 #3) — waiting 4s (total 7s)` so the dashboard reflects what the bot is doing.
+  - Each backoff sleep logs `429 #N — waiting Xs (cumulative Ys/1800s)` for full visibility.
+  - Connection timeouts also now log explicitly with the exception type and streak count.
+
 ## v1.4.2 — Rate-limit storms no longer kill sessions (2026-05-11)
 
 ### Fixed
