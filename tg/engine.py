@@ -131,6 +131,7 @@ class BettingEngine:
         self._was_rate_limited     = False
         self._rate_limit_wait      = 0.0
         self._consecutive_429      = 0
+        self._rate_limit_total_wait = 0.0
         self._last_api_ms          = 0.0
         self._api_ms_total         = 0.0
         self._api_ms_count         = 0
@@ -338,10 +339,9 @@ class BettingEngine:
                 self._set_error("Rate limit reached — cooling down")
                 self._was_rate_limited = True
                 try:
-                    retry_after = float(r.headers.get("Retry-After", 0))
+                    self._rate_limit_wait = float(r.headers.get("Retry-After", 0))
                 except (ValueError, TypeError):
-                    retry_after = 0.0
-                self._rate_limit_wait = max(retry_after, 30.0)
+                    self._rate_limit_wait = 0.0
             else:
                 body = r.text or ""
                 if "insufficient" in body.lower():
@@ -990,14 +990,16 @@ class BettingEngine:
                 if self._was_rate_limited:
                     self._was_rate_limited = False
                     self._consecutive_429 += 1
-                    if self._consecutive_429 >= 60:
+                    if self._rate_limit_total_wait >= 1800.0:
                         self.running = False
                         self.stop_reason = "Rate limit persisted >30min — giving up"
                         self.status = f"STOPPED: {self.stop_reason}"
                         self._flush_bets()
                         self._db_save_session(final=True)
                         break
-                    await asyncio.sleep(self._rate_limit_wait)
+                    delay = self._rate_limit_wait if self._rate_limit_wait > 0 else min(2 ** (self._consecutive_429 - 1), 30.0)
+                    self._rate_limit_total_wait += delay
+                    await asyncio.sleep(delay)
                     continue
                 self.consecutive_errors += 1
                 if self.consecutive_errors >= 10:
@@ -1020,6 +1022,7 @@ class BettingEngine:
 
             self.consecutive_errors = 0
             self._consecutive_429 = 0
+            self._rate_limit_total_wait = 0.0
             self.backoff_delay = 1.0
             self.total_bets += 1
             self.wagered    += amount_used
