@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4.2 — Rate-limit storms no longer kill sessions (2026-05-11)
+
+### Fixed
+
+- **Session killed by sustained 429 storm** — Long-running session (40h, 139k bets, +18 USDT) ended with "Too many consecutive errors: Rate limit reached — cooling down" because 429 responses were counted toward the same `consecutive_errors` bucket as real failures. With max backoff 30s and a 10-error threshold, the session died after ~3 minutes of rate-limiting — too tight for CryptoGames' actual rate-limit windows.
+  - 429 responses now tracked in a separate `_consecutive_429` counter that allows up to ~30 minutes of rate-limiting (60 retries × 30s wait) before giving up.
+  - Honors `Retry-After` header when CryptoGames provides it (falls back to 30s).
+  - Real errors (timeouts, bad responses) still kill the session at 10 consecutive — that behavior is unchanged.
+
 ## v1.4.1 — Fix _safe_send infinite recursion (2026-05-02)
 
 ### Fixed

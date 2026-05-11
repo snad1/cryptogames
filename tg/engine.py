@@ -128,6 +128,9 @@ class BettingEngine:
         self.backoff_delay   = 1.0
         self._insufficient_balance = False
         self._fatal_error          = False
+        self._was_rate_limited     = False
+        self._rate_limit_wait      = 0.0
+        self._consecutive_429      = 0
         self._last_api_ms          = 0.0
         self._api_ms_total         = 0.0
         self._api_ms_count         = 0
@@ -333,6 +336,12 @@ class BettingEngine:
                 return data
             elif r.status_code == 429:
                 self._set_error("Rate limit reached — cooling down")
+                self._was_rate_limited = True
+                try:
+                    retry_after = float(r.headers.get("Retry-After", 0))
+                except (ValueError, TypeError):
+                    retry_after = 0.0
+                self._rate_limit_wait = max(retry_after, 30.0)
             else:
                 body = r.text or ""
                 if "insufficient" in body.lower():
@@ -978,6 +987,18 @@ class BettingEngine:
                     self._flush_bets()
                     self._db_save_session(final=True)
                     break
+                if self._was_rate_limited:
+                    self._was_rate_limited = False
+                    self._consecutive_429 += 1
+                    if self._consecutive_429 >= 60:
+                        self.running = False
+                        self.stop_reason = "Rate limit persisted >30min — giving up"
+                        self.status = f"STOPPED: {self.stop_reason}"
+                        self._flush_bets()
+                        self._db_save_session(final=True)
+                        break
+                    await asyncio.sleep(self._rate_limit_wait)
+                    continue
                 self.consecutive_errors += 1
                 if self.consecutive_errors >= 10:
                     self.running = False
@@ -998,6 +1019,7 @@ class BettingEngine:
             bet_state    = "win" if raw_profit > 0 else "loss"
 
             self.consecutive_errors = 0
+            self._consecutive_429 = 0
             self.backoff_delay = 1.0
             self.total_bets += 1
             self.wagered    += amount_used
