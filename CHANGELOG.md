@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.4.6 — /update Telegram command for self-update (2026-06-10)
+
+### Added
+
+- **`/update` Telegram command (owner-only)** — Pull latest code from git, copy files, reinstall `casino-shared`, restart the bot. Equivalent to running `cgctl update` over SSH, but triggered from Telegram. Owner gate via `TG_OWNER_ID` env var (defaults to your user ID if unset). Implementation spawns `cgctl update` via `systemd-run --user --collect` so the update survives the bot getting killed by the restart.
+
 ## v1.4.5 — Remove 5-session concurrency limit (2026-05-12)
 
 ### Changed
