@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.4.8 — /update cd's into repo dir before running ctl (2026-06-11)
+
+### Fixed
+
+- **/update failed with "No cryptogames.py in current directory"** — `systemd-run` spawns bash with cwd=/. Now `cd /root/cryptogames && cgctl update` is the bash command. Override via `BOT_REPO_DIR` env var if your layout is different.
+
 ## v1.4.7 — /update reports real errors + writes update log (2026-06-10)
 
 ### Fixed
