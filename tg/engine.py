@@ -151,6 +151,7 @@ class BettingEngine:
         self._last_api_ms          = 0.0
         self._api_ms_total         = 0.0
         self._api_ms_count         = 0
+        self.peak_api_ms: float    = 0.0  # max single-bet API response time this session
 
         # ── strategy internals ──
         self.dalembert_unit  = 0
@@ -324,6 +325,8 @@ class BettingEngine:
             t0 = time.time()
             r = await self._http.post(url, json=payload)
             self._last_api_ms = (time.time() - t0) * 1000
+            if self._last_api_ms > self.peak_api_ms:
+                self.peak_api_ms = self._last_api_ms
             self._consecutive_timeouts = 0
 
             if r.status_code == 200:
@@ -980,6 +983,7 @@ class BettingEngine:
             "last_error": self.last_error,
             "api_ms": self._last_api_ms,
             "api_avg_ms": (self._api_ms_total / self._api_ms_count) if self._api_ms_count > 0 else 0,
+            "api_peak_ms": self.peak_api_ms,
             "overhead_ms": self._cycle_overhead_ms,
             "cycle_ms": self._cycle_ms,
         }
