@@ -1,3 +1,3 @@
 """CryptoGames Telegram Bot — Multi-tenant auto-betting via Telegram."""
 
-VERSION = "1.4.8"
+VERSION = "1.5.0"
