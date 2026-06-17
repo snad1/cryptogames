@@ -115,6 +115,10 @@ class BettingEngine:
         self._bets_this_min  = 0
         self._current_sec    = 0
         self._current_min    = 0
+        # Sliding 60s window — what the bot is doing RIGHT NOW (vs. session average above)
+        self.recent_bps      = 0.0
+        self.recent_bpm      = 0.0
+        self._recent_bet_times: deque = deque(maxlen=2000)
         self.profit_history  = deque(maxlen=40)
         self.profit_history.append(0.0)
         self.recent_bets     = deque(maxlen=5)
@@ -436,7 +440,14 @@ class BettingEngine:
 
     def _queue_bet(self, roll: float, bet_state: str, raw_profit: float,
                    amount_used: float, balance: float):
-        """Queue a bet row for batched insertion."""
+        """Queue a bet row for batched insertion.
+
+        Flush is intentionally NOT triggered here even when the queue passes
+        BET_BATCH_SIZE — _periodic_save (called from the async loop) handles
+        flushing via asyncio.to_thread so DB I/O never blocks the event loop.
+        Queue growing past 50 between saves is harmless (~6 KB per 50 rows;
+        even 1000 queued ≈ 128 KB).
+        """
         self._bet_queue.append((
             self.session_id, datetime.now().isoformat(),
             amount_used, self.multiplier,
@@ -444,8 +455,6 @@ class BettingEngine:
             roll, bet_state,
             raw_profit, balance,
         ))
-        if len(self._bet_queue) >= BET_BATCH_SIZE:
-            self._flush_bets()
 
     def _flush_bets(self):
         if not self._bet_queue:
@@ -527,16 +536,25 @@ class BettingEngine:
         except Exception as e:
             logger.error("User %d: DB save_session failed: %s", self.user_id, e)
 
-    def _periodic_save(self):
+    async def _periodic_save(self):
+        """Flush bets and save session stats periodically.
+
+        DB calls run in a worker thread so the event loop stays free for other
+        engines to keep betting — without this, 6 concurrent sessions
+        serialize on each other's flushes and bps collapses to ~1/N.
+        """
         now = time.time()
         if now - self._last_session_save >= SESSION_SAVE_SECS:
-            self._flush_bets()
-            self._db_save_session()
+            if self._bet_queue:
+                await asyncio.to_thread(self._flush_bets)
+            else:
+                await asyncio.to_thread(self._db_save_session)
 
         # Live cleanup: purge old bets every hour to prevent DB bloat
         if now - self._last_cleanup >= 3600:
             try:
-                deleted = cleanup_live_bets(self.db_path, self.purge_days)
+                deleted = await asyncio.to_thread(
+                    cleanup_live_bets, self.db_path, self.purge_days)
                 if deleted > 0:
                     logger.info("User %d: Live cleanup: deleted %d old bets (>%dd)",
                                 self.user_id, deleted, self.purge_days)
@@ -914,6 +932,8 @@ class BettingEngine:
             "biggest_loss": self.biggest_loss,
             "bps": self.bets_per_second,
             "bpm": self.bets_per_minute,
+            "recent_bps": self.recent_bps,
+            "recent_bpm": self.recent_bpm,
             "peak_bps": self.peak_bps,
             "low_bps": self.low_bps if self.low_bps != float("inf") else 0,
             "peak_bpm": self.peak_bpm,
@@ -963,8 +983,8 @@ class BettingEngine:
                 self.running = False
                 self.stop_reason = reason
                 self.status = f"STOPPED: {reason}"
-                self._flush_bets()
-                self._db_save_session(final=True)
+                await asyncio.to_thread(self._flush_bets)
+                await asyncio.to_thread(self._db_save_session, True)
                 break
 
             # bet pacing — minimum interval since the previous bet started
@@ -988,15 +1008,15 @@ class BettingEngine:
                     self.running = False
                     self.stop_reason = f"Insufficient balance for bet {self.current_bet:.8f}"
                     self.status = f"STOPPED: {self.stop_reason}"
-                    self._flush_bets()
-                    self._db_save_session(final=True)
+                    await asyncio.to_thread(self._flush_bets)
+                    await asyncio.to_thread(self._db_save_session, True)
                     break
                 if self._fatal_error:
                     self.running = False
                     self.stop_reason = self.last_error
                     self.status = f"STOPPED: {self.stop_reason}"
-                    self._flush_bets()
-                    self._db_save_session(final=True)
+                    await asyncio.to_thread(self._flush_bets)
+                    await asyncio.to_thread(self._db_save_session, True)
                     break
                 if self._was_rate_limited:
                     self._was_rate_limited = False
@@ -1005,8 +1025,8 @@ class BettingEngine:
                         self.running = False
                         self.stop_reason = "Rate limit persisted >30min — giving up"
                         self.status = f"STOPPED: {self.stop_reason}"
-                        self._flush_bets()
-                        self._db_save_session(final=True)
+                        await asyncio.to_thread(self._flush_bets)
+                        await asyncio.to_thread(self._db_save_session, True)
                         break
                     delay = self._rate_limit_wait if self._rate_limit_wait > 0 else min(2 ** (self._consecutive_429 - 1), 30.0)
                     self._rate_limit_total_wait += delay
@@ -1021,8 +1041,8 @@ class BettingEngine:
                     self.running = False
                     self.stop_reason = f"Too many consecutive errors: {self.last_error}"
                     self.status = f"STOPPED: {self.stop_reason}"
-                    self._flush_bets()
-                    self._db_save_session(final=True)
+                    await asyncio.to_thread(self._flush_bets)
+                    await asyncio.to_thread(self._db_save_session, True)
                     break
                 self.backoff_delay = min(self.backoff_delay * 2, 30.0)
                 await asyncio.sleep(self.backoff_delay)
@@ -1084,6 +1104,15 @@ class BettingEngine:
                 self.bets_per_second = self.total_bets / elapsed
                 self.bets_per_minute = self.bets_per_second * 60
 
+            # Sliding 60s window — drop entries older than 60s and recompute
+            mono = time.monotonic()
+            self._recent_bet_times.append(mono)
+            cutoff = mono - 60.0
+            while self._recent_bet_times and self._recent_bet_times[0] < cutoff:
+                self._recent_bet_times.popleft()
+            self.recent_bps = len(self._recent_bet_times) / 60.0
+            self.recent_bpm = self.recent_bps * 60
+
             sec_key = int(now)
             min_key = int(now) // 60
             if sec_key != self._current_sec:
@@ -1112,7 +1141,7 @@ class BettingEngine:
             self._queue_bet(roll, bet_state, raw_profit, amount_used, new_balance)
 
             # periodic session save
-            self._periodic_save()
+            await self._periodic_save()
 
             # profit-based base bet increment
             if (self.profit_increment is not None and self.profit_threshold
@@ -1150,9 +1179,9 @@ class BettingEngine:
                         logger.error("User %d: Milestone callback failed: %s", self.user_id, e)
 
         # session ended
-        self._flush_bets()
+        await asyncio.to_thread(self._flush_bets)
         if self.session_id:
-            self._db_save_session(final=True)
+            await asyncio.to_thread(self._db_save_session, True)
         self._close_conn()
         if self._http:
             try:
