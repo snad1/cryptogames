@@ -1,5 +1,19 @@
 # Changelog
 
+## CLI v1.5.0 / TG v1.7.0 — WolfBet hardening subset ported (2026-07-19)
+
+Ports the portable subset of the wolfbet v2.27-v2.30 hardening wave. No behaviour change to the bet loop.
+
+- **SQLite PRAGMAs** — `synchronous=NORMAL`, `busy_timeout=5000`, `cache_size=-32000`, `temp_store=MEMORY` on top of the existing `journal_mode=WAL`, on both CLI (`_db_conn`) and TG (`BettingEngine._get_conn`) connection paths. Kills 30–40 ms per-commit fsync on typical VPS SSD. WAL-safe.
+- **systemd `Restart=on-failure`** — replaces `Restart=always` in `install.sh` for both the daemon and TG units. Prevents "stopped by user" being reversed by systemd.
+- **Uptime pause bookkeeping** — new `session_bet_ended_at` + `session_pause_started_at` fields on `BettingEngine`. `pause()` freezes both, `resume()` clears. `get_status()` uses the frozen bet-end as the uptime ceiling. `_db_save_session(final=True)` writes the frozen `ended_at` so DB session runtime no longer includes pause time. New `uptime_sec` + `pause_remaining_sec` keys on the status dict.
+- **Row 6 monitor config-progress row** — the old `" P/L —"` sparkline placeholder is replaced by a compact `CFG` summary showing profit-milestone %, active stop conditions (`MaxP`/`MaxL`/`MaxB`/`MaxW`) with `current/target (pct%)` progress, `MinBal` proximity, and `Rec on(Xs)` when recurring. Green <80%, yellow ≥80%, bold-red ≥95% visual alarm. Fallback `" CFG  ─  no goals set"` when nothing is armed.
+- **TG `/diagnose`** — new bottleneck analysis command (top blocker among Network / CLI overhead / User delay + advice).
+- **TG `/analytics`** — new lifetime aggregates command (per-game + per-strategy + top-5 best/worst).
+- **First test suite** — `tests/test_portability_v1.py` (21 tests) locks all of the above.
+
+`VERSION` `1.4.0` → `1.5.0`. `tg/__init__.py` `1.6.10` → `1.7.0`. `cgctl` unchanged.
+
 ## v1.6.10 — `/status` speed block trimmed (2026-06-17)
 
 ### Changed
