@@ -1,5 +1,28 @@
 # Changelog
 
+## CLI v1.6.0 / TG v1.8.0 — Date-range stats + analytics (2026-08-15)
+
+Mirrors wolfbet v2.30.9/v2.31.0: date-window evaluation of existing history, everywhere stats are shown.
+
+### CLI — `--stats --since DATE [--until DATE]`
+
+- **`--since` / `--until`** (standalone parser args, work alongside the `--stats` group member): bare dates (`YYYY-MM-DD`) or full ISO timestamps; a bare `--until` is extended to end-of-day (`T23:59:59`) so the day is inclusive. ISO strings compare correctly lexically in SQLite.
+- New `_stats_date_window(since, until)` helper builds the parameterized `WHERE started_at >= ? AND started_at <= ?` clause shared by the session-list and totals queries.
+- `cmd_stats(since, until)` threads the window into both queries; the listing limit rises to **50** when a window is active (20 default). Headers show the window and the totals block reads `Range Totals` vs `All-Time Totals`.
+- `cgctl stats` now passes args through (`cgctl stats --since 2026-08-14` works).
+
+### TG — `/analytics [SINCE] [UNTIL]`
+
+- `/analytics 2026-08-14` → windowed lifetime + by-game + by-strategy + top-5 blocks; header shows the window (`Range analytics` vs `Lifetime analytics`).
+- `/analytics 2026-08-01 2026-08-15` → explicit window; bare UNTIL date = inclusive end of day.
+- `>2 args` → friendly usage hint (never a traceback).
+- `/help` documents the date form.
+- Same window semantics as the CLI (parameterized, all five queries share the `{where}` clause).
+
+**Tests**: `tests/test_portability_v1.py` grows to 29 — `_stats_date_window` unit checks (empty / since-only / bare-until end-of-day), functional `cmd_stats(since=…)` against a seeded temp DB (window filters sessions, `Range Totals` header; no-filter `All-Time` regression), argparse source shape (`--since` standalone, dispatch threading), TG source shape (`context.args` parsed, `{where}` in all 5 queries, Range header), `/help` mention, version assertions.
+
+`VERSION` `1.5.0` → `1.6.0`. `tg/__init__.py` `1.7.0` → `1.8.0`. `cgctl` gained `"$@"` passthrough on `stats`.
+
 ## CLI v1.5.0 / TG v1.7.0 — WolfBet hardening subset ported (2026-07-19)
 
 Ports the portable subset of the wolfbet v2.27-v2.30 hardening wave. No behaviour change to the bet loop.

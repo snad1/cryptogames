@@ -49,11 +49,11 @@ def _mk_engine(db):
 
 # ── VERSION ───────────────────────────────────────────────
 def test_cli_version():
-    assert cg.VERSION == "1.5.0"
+    assert cg.VERSION == "1.6.0"
 
 
 def test_tg_version():
-    assert tg.VERSION == "1.7.0"
+    assert tg.VERSION == "1.8.0"
 
 
 # ── PRAGMAs ───────────────────────────────────────────────
@@ -237,3 +237,92 @@ def test_help_mentions_new_commands():
     src = inspect.getsource(tg_handlers.cmd_help)
     assert "/diagnose" in src
     assert "/analytics" in src
+
+
+# ── Date-range filter (CLI --stats --since/--until) ────────
+def test_stats_date_window_empty():
+    assert cg._stats_date_window() == ("", [], "")
+    assert cg._stats_date_window(None, None) == ("", [], "")
+
+
+def test_stats_date_window_since_only():
+    clause, params, label = cg._stats_date_window(since="2026-08-10")
+    assert clause == " WHERE started_at >= ?"
+    assert params == ["2026-08-10"]
+    assert "2026-08-10" in label
+
+
+def test_stats_date_window_bare_until_inclusive():
+    clause, params, label = cg._stats_date_window(until="2026-08-15")
+    assert clause == " WHERE started_at <= ?"
+    assert params == ["2026-08-15T23:59:59"]
+    iso_until = cg._stats_date_window(since="2026-08-01", until="2026-08-15T12:00:00")
+    assert iso_until[1] == ["2026-08-01", "2026-08-15T12:00:00"]
+    assert iso_until[0] == " WHERE started_at >= ? AND started_at <= ?"
+
+
+def _seed_sessions_db():
+    db = _mk_db()
+    conn = sqlite3.connect(db)
+    for sid, day in ((1, "2026-08-01"), (2, "2026-08-10"), (3, "2026-08-15")):
+        conn.execute(
+            "INSERT INTO sessions (id, started_at, currency, game, strategy, "
+            "base_bet, multiplier, total_bets, wins, losses, profit, wagered) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (sid, f"{day}T12:00:00", "usdt", "dice", "Flat", 0.0001, 2.0,
+             10, 5, 5, 0.0001, 0.001))
+    conn.commit()
+    conn.close()
+    return db
+
+
+def test_cmd_stats_since_filters_sessions(monkeypatch, capsys):
+    db = _seed_sessions_db()
+    old = cg.DB_PATH
+    monkeypatch.setattr(cg, "DB_PATH", db)
+    try:
+        cg.cmd_stats(since="2026-08-10")
+        out = _strip_ansi(capsys.readouterr().out)
+        assert "Session #2" in out and "Session #3" in out
+        assert "Session #1" not in out
+        assert "Range Totals" in out
+        assert "All-Time Totals" not in out
+    finally:
+        cg.DB_PATH = old
+        os.remove(db)
+
+
+def test_cmd_stats_no_filter_is_all_time(monkeypatch, capsys):
+    db = _seed_sessions_db()
+    old = cg.DB_PATH
+    monkeypatch.setattr(cg, "DB_PATH", db)
+    try:
+        cg.cmd_stats()
+        out = _strip_ansi(capsys.readouterr().out)
+        assert "Session #1" in out and "Session #2" in out and "Session #3" in out
+        assert "All-Time Totals" in out
+    finally:
+        cg.DB_PATH = old
+        os.remove(db)
+
+
+def test_argparse_has_since_until():
+    src = inspect.getsource(cg.main)
+    assert 'parser.add_argument("--since"' in src
+    assert 'parser.add_argument("--until"' in src
+    assert 'group.add_argument("--since"' not in src
+    assert 'cmd_stats(since=args.since, until=args.until)' in src
+
+
+# ── Date-range filter (TG /analytics SINCE UNTIL) ──────────
+def test_tg_analytics_parses_date_window():
+    src = inspect.getsource(tg_handlers.cmd_analytics)
+    assert "context.args" in src
+    assert "started_at >= ?" in src
+    assert src.count("FROM sessions{where}") >= 5
+    assert "Range' if args_ else 'Lifetime'" in src
+
+
+def test_tg_help_mentions_analytics_window():
+    src = inspect.getsource(tg_handlers.cmd_help)
+    assert "/analytics [SINCE] [UNTIL]" in src
