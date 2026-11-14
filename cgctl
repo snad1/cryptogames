@@ -56,7 +56,8 @@ usage() {
     echo "    cgctl web update   Update web app files"
     echo ""
     echo "  DATA:"
-    echo "    cgctl stats       Show recent 20 sessions in detail (--since/--until DATE)"
+    echo "    cgctl stats [--since DATE] [--until DATE] [--lane K]      Session stats (optional window / lane)"
+    echo "    cgctl analytics [--since DATE] [--until DATE] [--lane K]  Aggregates: by game, strategy, lane, top 5"
     echo "    cgctl session ID  Full stats + streak distribution"
     echo "    cgctl presets     List saved presets"
     echo "    cgctl update      Update bot from current directory"
@@ -160,6 +161,10 @@ cmd_tmux() {
 
 cmd_stats() {
     "$PYTHON" "$BOT" --stats "$@"
+}
+
+cmd_analytics() {
+    "$PYTHON" "$BOT" --analytics "$@"
 }
 
 cmd_session() {
@@ -465,6 +470,7 @@ case "${1:-}" in
     interactive) cmd_interactive ;;
     tmux)        cmd_tmux ;;
     stats)       shift; cmd_stats "$@" ;;
+    analytics)   shift; cmd_analytics "$@" ;;
     session)     cmd_session "${2:-}" ;;
     presets)     cmd_presets ;;
     update)      cmd_update ;;

@@ -49,7 +49,7 @@ def _mk_engine(db):
 
 # ── VERSION ───────────────────────────────────────────────
 def test_cli_version():
-    assert cg.VERSION == "1.7.0"
+    assert cg.VERSION == "1.8.0"
 
 
 def test_tg_version():
@@ -239,24 +239,24 @@ def test_help_mentions_new_commands():
     assert "/analytics" in src
 
 
-# ── Date-range filter (CLI --stats --since/--until) ────────
+# ── Date-range filter (CLI --stats --since/--until; shared helper since 1.8.0) ──
 def test_stats_date_window_empty():
-    assert cg._stats_date_window() == ("", [], "")
-    assert cg._stats_date_window(None, None) == ("", [], "")
+    assert cg.stats_date_window() == ("", [], "")
+    assert cg.stats_date_window(None, None) == ("", [], "")
 
 
 def test_stats_date_window_since_only():
-    clause, params, label = cg._stats_date_window(since="2026-08-10")
+    clause, params, label = cg.stats_date_window(since="2026-08-10")
     assert clause == " WHERE started_at >= ?"
     assert params == ["2026-08-10"]
     assert "2026-08-10" in label
 
 
 def test_stats_date_window_bare_until_inclusive():
-    clause, params, label = cg._stats_date_window(until="2026-08-15")
+    clause, params, label = cg.stats_date_window(until="2026-08-15")
     assert clause == " WHERE started_at <= ?"
-    assert params == ["2026-08-15T23:59:59"]
-    iso_until = cg._stats_date_window(since="2026-08-01", until="2026-08-15T12:00:00")
+    assert params == ["2026-08-15T23:59:59.999999"]
+    iso_until = cg.stats_date_window(since="2026-08-01", until="2026-08-15T12:00:00")
     assert iso_until[1] == ["2026-08-01", "2026-08-15T12:00:00"]
     assert iso_until[0] == " WHERE started_at >= ? AND started_at <= ?"
 
@@ -311,7 +311,7 @@ def test_argparse_has_since_until():
     assert 'parser.add_argument("--since"' in src
     assert 'parser.add_argument("--until"' in src
     assert 'group.add_argument("--since"' not in src
-    assert 'cmd_stats(since=args.since, until=args.until)' in src
+    assert 'cmd_stats(since=args.since, until=args.until, lane=args.lane)' in src
 
 
 # ── Date-range filter (TG /analytics SINCE UNTIL) ──────────
