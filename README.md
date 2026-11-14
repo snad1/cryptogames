@@ -93,7 +93,8 @@ cgctl start             # Start CLI bot as daemon
 cgctl stop              # Stop CLI bot
 cgctl monitor           # Attach live TUI to running daemon
 cgctl status            # Check running session status
-cgctl stats             # Show all-time session statistics
+cgctl stats             # Show all-time session statistics (--since/--until DATE, --lane K)
+cgctl analytics         # Aggregates: by game, strategy, lane, top 5 best / worst
 
 cgctl tg env            # Edit .env (set Telegram token)
 cgctl tg start          # Start Telegram bot
@@ -221,6 +222,8 @@ python3 cryptogames.py --status          # Check running session status
 python3 cryptogames.py --stop            # Stop a running daemon
 python3 cryptogames.py --setup-only      # Wizard only, don't start
 python3 cryptogames.py --stats           # Session history + totals
+python3 cryptogames.py --analytics       # Aggregates: by game, strategy, lane, top 5
+python3 cryptogames.py --stats --since "2026-11-13 14:00" --until 2026-11-14 --lane 2
 python3 cryptogames.py --last-bets N     # Last N bets across sessions
 python3 cryptogames.py --session-bets N  # Full stats + streaks for session N
 python3 cryptogames.py --verbose         # Enable DEBUG logging

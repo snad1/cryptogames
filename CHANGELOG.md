@@ -1,5 +1,19 @@
 # Changelog
 
+## CLI v1.8.0 — Stats windows, analytics, durations, lane filter (2026-11-14)
+
+Mirrors WolfBet CLI v2.23.0 / v2.31.0 (`--analytics`, date-windowed), v2.30.9 (windowed totals), v2.33.0 (time-of-day window), v2.33.1 (wins / losses per session), v2.34.0 (time span, bet time, run time) and the stats / analytics part of v2.35.0 (lanes). TG unchanged.
+
+- **Fix: time-of-day window** — `--since "2026-11-13 14:00"` matched the whole day (`' ' < 'T'`). The window now comes from `shared.core.stats.stats_date_window`: the space becomes `T`, a bare `--until` date runs to `23:59:59.999999`, and a bad bound prints `Invalid --since/--until "…"` and no rows. The local `_stats_date_window` is gone.
+- **`--stats` totals** — `Sessions: N (first → last)`, `Time Span … Bet Time …` (pauses between cycles count in the span, not in bet time), `Wins/Session` and `Losses/Session` (max / avg). All follow the window.
+- **`--analytics [--since --until]`** (new, also `cgctl analytics`) — Overall panel (time range / span / bet time, sessions in profit / loss, win rate, wagered, P/L, best / worst session), By game (dice only, so one row), By strategy, Top 5 best / worst sessions. Reads only the `sessions` table.
+- **`--lane K`** on `--stats` / `--analytics` filters `sessions.lane` (rows from before lanes count as lane 1); session headers show `[LK]` when K > 1; analytics shows "By lane" when the window holds more than one lane. `core.database.migrate_db` adds `sessions.lane` to existing DBs (`ensure_sessions_lane`; the TG bot runs it too). Until lanes run (E5) every new row is lane 1.
+- **Run time** — dashboard and `--monitor` headers show `Run …` from `run_uptime_sec` (whole run, across cycles; absent for old state files); `--status` adds `Running for`.
+- N/A: none.
+- Tests: `tests/test_wolfbet_sync_e4.py`. `test_portability_v1.py` now calls the shared window helper and pins 1.8.0.
+
+`VERSION` `1.7.0` → `1.8.0`.
+
 ## CLI v1.7.0 — Session cycles, streak reset, live reload (2026-11-14)
 
 Mirrors WolfBet CLI v2.16.0, v2.25.3, v2.28.2–v2.28.4, v2.30.1, v2.30.6, v2.30.7, v2.32.0 and v2.32.1 (terminal part). TG unchanged. Dice only; the `ClientSeed` rotation after each bet and CryptoRider (strategy 6) are unchanged and carry across cycles.
