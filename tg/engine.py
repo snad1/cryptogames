@@ -25,6 +25,9 @@ from .config import API_BASE, APP_ENV, logger
 from core.database import init_db, migrate_db, db_connect, cleanup_old_bets, cleanup_live_bets
 from core.strategy import StrategyRule, load_rules_from_text
 from core.engine import compute_next_bet, cryptorider_switch, apply_action, evaluate_rules
+from shared.core.session_rules import (
+    STREAK_RESET_REASON, record_outcome, streak_reset_triggered, streak_reset_stop_reason,
+)
 
 # ── Batching / periodic save constants ──────────────────
 BET_BATCH_SIZE     = 50      # flush bets + session stats to DB every N bets
@@ -84,6 +87,11 @@ class BettingEngine:
         self.max_bets        = config.get("max_bets")
         self.max_wins        = config.get("max_wins")
         self.stop_on_balance = config.get("stop_on_balance")
+        # Streak reset (WolfBet v2.32.0): stop on the first win after this many
+        # consecutive losses (profit >= 0 only); handlers restart after
+        # streak_reset_delay. The delay is kept here for /status only.
+        self.streak_reset_losses = config.get("streak_reset_losses")
+        self.streak_reset_delay  = config.get("streak_reset_delay")
 
         # ── session state ──
         self.running         = False
@@ -102,6 +110,8 @@ class BettingEngine:
         self.current_streak  = 0
         self.max_win_streak  = 0
         self.max_loss_streak = 0
+        # Length of the loss streak the latest win just broke (0 if none).
+        self.last_broken_loss_streak = 0
         self.highest_bet     = 0.0
         self.highest_win     = 0.0
         self.biggest_loss    = 0.0
@@ -344,7 +354,7 @@ class BettingEngine:
                     if isinstance(err_msg, dict):
                         err_msg = err_msg.get("message", str(err_msg))
                     err_str = str(err_msg).lower()
-                    if "insufficient" in err_str or "balance" in err_str:
+                    if "insufficient" in err_str:
                         self._set_error("Insufficient balance")
                         self._insufficient_balance = True
                         return None
@@ -392,7 +402,7 @@ class BettingEngine:
                 self._consecutive_timeouts = 0
         except Exception as e:
             err_str = str(e).lower()
-            if "insufficient" in err_str or "balance" in err_str:
+            if "insufficient" in err_str:
                 self._set_error("Insufficient balance")
                 self._insufficient_balance = True
             else:
@@ -639,6 +649,10 @@ class BettingEngine:
             return True, f"Max wins: {self.wins}"
         if self.stop_on_balance is not None and b <= self.stop_on_balance:
             return True, f"Balance floor: {b:.8f}"
+        # Streak reset — only on the win that broke an N+ loss streak, not in the red.
+        if streak_reset_triggered(self.current_streak, self.last_broken_loss_streak,
+                                  self.streak_reset_losses, p):
+            return True, streak_reset_stop_reason(self.last_broken_loss_streak)
         return False, ""
 
     def _check_milestone(self, last_state: str) -> str:
@@ -736,6 +750,8 @@ class BettingEngine:
             "max_bets": self.max_bets,
             "max_wins": self.max_wins,
             "stop_on_balance": self.stop_on_balance,
+            "streak_reset_losses": self.streak_reset_losses,
+            "streak_reset_delay": self.streak_reset_delay,
             "profit_increment": self.profit_increment,
             "profit_threshold": self.profit_threshold,
             "proxy": self.proxy,
@@ -767,6 +783,7 @@ class BettingEngine:
             "current_streak": self.current_streak,
             "max_win_streak": self.max_win_streak,
             "max_loss_streak": self.max_loss_streak,
+            "last_broken_loss_streak": self.last_broken_loss_streak,
             "highest_bet": self.highest_bet,
             "highest_win": self.highest_win,
             "biggest_loss": self.biggest_loss,
@@ -793,6 +810,7 @@ class BettingEngine:
         self.current_streak    = snap["current_streak"]
         self.max_win_streak    = snap["max_win_streak"]
         self.max_loss_streak   = snap["max_loss_streak"]
+        self.last_broken_loss_streak = snap.get("last_broken_loss_streak", 0)
         self.highest_bet       = snap["highest_bet"]
         self.highest_win       = snap["highest_win"]
         self.biggest_loss      = snap["biggest_loss"]
@@ -882,6 +900,10 @@ class BettingEngine:
             v = changes["stop_on_balance"]
             self.stop_on_balance = float(v) if v is not None else None
             msgs.append(f"Min balance: {float(v):.8f}" if v is not None else "Min balance: off")
+        if "streak_reset_losses" in changes:
+            v = changes["streak_reset_losses"]
+            self.streak_reset_losses = int(v) if v is not None else None
+            msgs.append(f"Streak reset: after {v} losses" if v is not None else "Streak reset: off")
         if "milestone_bets" in changes:
             self.milestone_bets = int(changes["milestone_bets"])
             msgs.append(f"Milestone bets: {self.milestone_bets}")
@@ -1007,6 +1029,8 @@ class BettingEngine:
             "streak_delay_bets": self.streak_delay_bets,
             "streakbet_loss": self.streakbet_loss,
             "basebet_pct": self.basebet_pct,
+            "streak_reset_losses": self.streak_reset_losses,
+            "streak_reset_delay": self.streak_reset_delay,
             "rule": self.rule,
             "bet_value": None,
             "win_mult": self.win_mult,
@@ -1144,15 +1168,19 @@ class BettingEngine:
             self.profit     += raw_profit
             self.current_balance = new_balance
 
-            if bet_state == "win":
+            is_win = bet_state == "win"
+            if is_win:
                 self.wins += 1
                 if raw_profit > self.highest_win: self.highest_win = raw_profit
-                self.current_streak = max(self.current_streak, 0) + 1
-                self.max_win_streak = max(self.max_win_streak, self.current_streak)
             else:
                 self.losses += 1
                 if amount_used > self.biggest_loss: self.biggest_loss = amount_used
-                self.current_streak = min(self.current_streak, 0) - 1
+            self.current_streak, broken = record_outcome(self.current_streak, is_win)
+            if broken is not None:
+                self.last_broken_loss_streak = broken
+            if is_win:
+                self.max_win_streak = max(self.max_win_streak, self.current_streak)
+            else:
                 self.max_loss_streak = max(self.max_loss_streak, abs(self.current_streak))
 
             if amount_used > self.highest_bet: self.highest_bet = amount_used

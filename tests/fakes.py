@@ -12,7 +12,9 @@ Speaks the REST shape the clients parse (cryptogames.py `api_place_bet` /
     GET  /v1/settings/{coin}       -> {"MinBet", "MinimumBet", "MaxWin", "Edge"}
 Read-only GETs never consume the script.
 
-Script outcomes: win, loss, insufficient_balance, http_429, timeout.
+Script outcomes: win, loss, insufficient_balance, http_429, timeout,
+api_error_balance (an HTTP-200 rejection that mentions "balance" but is
+not insufficient funds).
 429 carries `Retry-After: 3` (the TG loop honours it).
 An empty script answers insufficient_balance and sets `exhausted`.
 """
@@ -24,7 +26,8 @@ import httpx
 import requests
 
 API_BASE = "https://api.crypto.games"
-OUTCOMES = {"win", "loss", "insufficient_balance", "http_429", "timeout"}
+OUTCOMES = {"win", "loss", "insufficient_balance", "http_429", "timeout",
+            "api_error_balance"}
 RETRY_AFTER = "3"
 
 
@@ -85,6 +88,8 @@ class FakeCasino:
             raise FakeTimeout()
         if outcome == "http_429":
             return 429, {"Message": "Too many requests"}, {"Retry-After": RETRY_AFTER}
+        if outcome == "api_error_balance":
+            return 200, {"Message": "Balance currency not supported"}, {}
         if outcome == "insufficient_balance" or amount > self.balance:
             return 200, {"Message": "Insufficient balance"}, {}
 
