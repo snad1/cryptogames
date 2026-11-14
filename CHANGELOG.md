@@ -1,5 +1,23 @@
 # Changelog
 
+## CLI v1.9.0 — Observability and tooling (2026-11-14)
+
+Mirrors WolfBet CLI v2.17.0 and v2.30.3–v2.30.5 (metrics), v2.18.0 (wizard Step 5b + preset keys), v2.19.0 (`T` tweak), v2.22.1 / v2.32.1 (risky config + chain depth), v2.25.0 (`--config-show` / `--config-set` / `--version`), v2.26.0 (proxy, `purge_days`, `--cleanup`), v2.26.1 (`--benchmark` / `--diagnose`), v2.27.0 (async bet writer) and v2.28.1 (monitor footer, systemd-aware stop). TG unchanged.
+
+- **Metrics** — API last / avg / peak / p50 / p99 and on-target % (with a bet delay), rolling cycle p50 / p99 / mean, recent BPS (1000 / cycle mean), theoretical max BPS and efficiency. Two new rows on the dashboard and `--monitor`; `--status` adds API, Cycle, Efficiency and DB writer rows. The state file gains the WolfBet metric keys plus `purge_days`, `proxy` (masked) and the writer stats.
+- **`--benchmark [N]`** — N (default 20, 3–200) read-only `GET /v1/balance/{coin}/{key}` through the live session (proxy included); min / p50 / mean / p99 / max, theoretical BPS and the `casino-shared` verdict. **`--diagnose`** — top blocker (network, CLI overhead, bet delay) and advice from the running daemon's state file.
+- **Retention** — `purge_days` (1–30, default 3); startup purge and an hourly retention thread; `--cleanup [DAYS]` purges bet rows of old sessions and keeps the session rows.
+- **Proxy** — `proxy` (http / https / socks5) on one `requests.Session` that every API call now uses; set at load, `--config-set`, tweak and SIGHUP; credentials masked everywhere.
+- **Async bet writer** — `db_write_mode` `async` (default; batches of 32 / 0.1 s, a full queue writes synchronously, drained before the session is saved on every exit) or `sync`.
+- **Live editing** — wizard Step 5b (recurring, streak reset, `basebet_pct`, streak delays, milestones); `T` hotkey tweak with WolfBet's aliases (`_apply_mutation`); `--config-set KEY=VALUE …` saves, prints old → new and clamp warnings, refuses `api_key`, never writes a `CRYPTOGAMES_API_KEY` env key to disk, and SIGHUPs a running daemon; `--config-show`; `--version`; `--help` examples. `_check_risky_config` (incl. the streak-reset chain-depth warning) shows in the wizard confirm step and logs at start. Strategy keys match WolfBet (2 / 3 / 7 / 8), so no remap.
+- **Monitor** — footer hint line and `Keys:` banner; `S` stops through `systemctl --user stop cryptogames` when the daemon runs in that unit, else SIGTERM.
+- **Fix: API key leaks.** crypto.games puts the key in the URL path, and a failed request quoted it in the log, `last_error` (state file, `--status`, dashboard) and connect errors. A redacting log formatter (tracebacks too) and `_redact` on errors now mask it.
+- **Fix: dead `--status` "Rate Limit" row** (always `?/?`) removed.
+- N/A: pipelining (`pipeline_depth`), the rate-limit / `/auto/start` quota rows (no quota headers, no server auto-bet), auto-bet UUID clearing, `bet_value` derivation (crypto.games takes `Payout` + `UnderOver`). Parallel lanes and `--benchmark --lanes` are E5-S9.
+- Tests: `tests/test_wolfbet_sync_e5.py` (102). `tests/conftest.py` now patches `_http_session` and fails any unpatched live request; `test_portability_v1.py` pins 1.9.0.
+
+`VERSION` `1.8.0` → `1.9.0`.
+
 ## CLI v1.8.0 — Stats windows, analytics, durations, lane filter (2026-11-14)
 
 Mirrors WolfBet CLI v2.23.0 / v2.31.0 (`--analytics`, date-windowed), v2.30.9 (windowed totals), v2.33.0 (time-of-day window), v2.33.1 (wins / losses per session), v2.34.0 (time span, bet time, run time) and the stats / analytics part of v2.35.0 (lanes). TG unchanged.

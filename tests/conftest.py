@@ -51,6 +51,11 @@ def _sandbox(tmp_path, monkeypatch, sleeps):
     monkeypatch.setattr(tg_database, "DATA_DIR", str(tmp_path / "tg"))
     monkeypatch.setattr(cg, "state", cg.BotState())
 
+    def _no_live(*a, **k):
+        raise AssertionError("live HTTP request from a test (patch cg._http_session)")
+    monkeypatch.setattr(cg._http_session, "request", _no_live)
+    monkeypatch.setattr(cg._http_session, "proxies", {})
+
     async def fast_sleep(delay, *a, **k):
         sleeps.append(delay)
         await _real_async_sleep(0)
@@ -72,6 +77,9 @@ def cli_state(fake_casino, monkeypatch):
         api = fake_casino.requests_api()
         monkeypatch.setattr(cg.requests, "get", api.get)
         monkeypatch.setattr(cg.requests, "post", api.post)
+        # v1.9.0 — the CLI calls the API through `_http_session` (proxy support).
+        monkeypatch.setattr(cg._http_session, "get", api.get)
+        monkeypatch.setattr(cg._http_session, "post", api.post)
         cg.init_db()
         s = cg.state
         s.api_key = fake_casino.api_key
