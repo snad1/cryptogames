@@ -227,6 +227,11 @@ python3 cryptogames.py --stats --since "2026-11-13 14:00" --until 2026-11-14 --l
 python3 cryptogames.py --last-bets N     # Last N bets across sessions
 python3 cryptogames.py --session-bets N  # Full stats + streaks for session N
 python3 cryptogames.py --verbose         # Enable DEBUG logging
+python3 cryptogames.py --config-set lanes=3 lane_split=budget   # Parallel lanes (one account)
+python3 cryptogames.py --config-set lane2.maxloss=0.01 lane3.mult=3
+python3 cryptogames.py --daemon --lane 2 # Run lane 2 (--status/--monitor/--stop take --lane K too)
+python3 cryptogames.py --lanes-status    # One row per lane + totals
+python3 cryptogames.py --benchmark 20 --lanes 4   # Read-only probe at 1..4 clients, recommends a lane count
 ```
 
 ---

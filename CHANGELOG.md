@@ -1,5 +1,23 @@
 # Changelog
 
+## CLI v1.10.0 — Parallel lanes (2026-11-14)
+
+Mirrors WolfBet CLI v2.35.0 (parallel lanes) and v2.36.0 (`lane_split`; where the two differ the v2.36.0 code wins). All lane logic comes from `shared.core.lanes`; cryptogames keeps only the state glue. TG unchanged.
+
+- **Lane identity** — `--lane K` (1–10, default 1) runs before every command. Lane K > 1 uses `…_live.laneK.json` / `….laneK.pid` and prefixes log lines `[LK]` (the API key is still masked); `--status`, `--monitor`, `--stop` and `--diagnose` with `--lane K` act on that lane. A bad value exits 2. Lane 1 keeps today's paths, unit and config writes.
+- **`--lanes-status`** (new) — one row per lane state file (state, session, uptime, run time, profit, equity, bps) plus totals. No Pace column: crypto.games has no rate-limit quota headers, so there is no soft pacing.
+- **DB** — each session row records its `lane`.
+- **Money split (`lanes.split`)** — `none` (default: every lane bets the full base bet, no budget guard), `budget` (each lane may risk balance ÷ lanes, fixed at its start from `GET /v1/balance`), `bet` (base bet and `basebet_pct` ÷ lanes), `both`. With a budget, a lane stops for good with `Lane budget exceeded …` when its next bet is larger than its equity (share + its own result across cycles); this stop never triggers a recurring or streak-reset restart. The streak-reset chain-depth warning uses the share only in `budget` / `both`. The state file writes `lane`, `lanes_count`, `lane_split`, `lane_share`, `lane_equity`.
+- **Per-lane overrides** — `lanes.overrides[K]` load over the base config, and SIGHUP reload merges them. `--config-set lanes=N`, `lane_split=MODE`, `laneK.key=value` and `laneK.key=default` (removes the override); values go through the normal `_apply_mutation` checks. Can't differ per lane: `api_key`, `currency` (coin), `proxy`, `purge_days`, `db_write_mode` (aliases such as `purgedays` / `dbmode` resolve first). `save_config` keeps the `lanes` block, writes the full bet for an untouched split bet, and a lane ≥ 2 never writes the base config. A base `--config-set` SIGHUPs every running lane; `--config-show` prints the lane count, split mode and overrides.
+- **Start stagger** — lane K waits (K − 1) × 2 s before its first bet.
+- **`--benchmark N --lanes M`** — the read-only `GET /v1/balance/{coin}/{key}` probe at 1..M concurrent clients (each its own `requests.Session` with the live proxy; key masked): req/s, scaling, p50, ok, 429s, then the recommended lane count.
+- **ClientSeed (L7)** — crypto.games takes `ClientSeed` in every `placebet` body, and the server seed is server-managed (the reply carries `NextServerSeedHash`; the client never sets it). The seed is per request, not an account-wide pair, so **each lane rotates its own ClientSeed** after each bet, as one bot does. No code change.
+- Deviation: monitor `S` / systemd stop uses the lane's unit (`cryptogames-lane@K` for K > 1) so systemd does not respawn a stopped lane. `--preset` runs ignore lane overrides (as WolfBet).
+- N/A: soft pacing and the `/auto/start` lock (no quota headers, no server auto-bet).
+- Tests: `tests/test_wolfbet_sync_e5_lanes.py` (57); `test_portability_v1.py` pins 1.10.0.
+
+`VERSION` `1.9.0` → `1.10.0`.
+
 ## CLI v1.9.0 — Observability and tooling (2026-11-14)
 
 Mirrors WolfBet CLI v2.17.0 and v2.30.3–v2.30.5 (metrics), v2.18.0 (wizard Step 5b + preset keys), v2.19.0 (`T` tweak), v2.22.1 / v2.32.1 (risky config + chain depth), v2.25.0 (`--config-show` / `--config-set` / `--version`), v2.26.0 (proxy, `purge_days`, `--cleanup`), v2.26.1 (`--benchmark` / `--diagnose`), v2.27.0 (async bet writer) and v2.28.1 (monitor footer, systemd-aware stop). TG unchanged.
