@@ -1,5 +1,21 @@
 # Changelog
 
+## CLI v1.7.0 — Session cycles, streak reset, live reload (2026-11-14)
+
+Mirrors WolfBet CLI v2.16.0, v2.25.3, v2.28.2–v2.28.4, v2.30.1, v2.30.6, v2.30.7, v2.32.0 and v2.32.1 (terminal part). TG unchanged. Dice only; the `ClientSeed` rotation after each bet and CryptoRider (strategy 6) are unchanged and carry across cycles.
+
+- **Recurring and streak-reset cycles.** On a stop that `should_restart` allows (recurring on and profit ≥ 0, or a streak reset), the CLI closes the `sessions` row, pauses `recurring_delay` (default 60 s) or `streak_reset_delay` (default 600 s), then opens a new row with fresh counters. The pause ends early on `q` / SIGTERM, and then no new row opens. The bumped `base_bet` is kept; `next_profit_milestone` re-arms from `profit_threshold`. Monitor and dashboard show `◐ PAUSED x/y`.
+- **Streak reset** — `streak_reset_losses` N stops on the first win after N+ losses, only while profit ≥ 0, and restarts even with `recurring` off.
+- **Streak delays and sizing** — `streak_delay_loss` / `streak_delay_win` / `streak_delay_bets` ("N:sec") sleep before the next bet; `streakbet_loss` ("N:mult") scales the next bet on an N+ loss streak; `basebet_pct` re-sizes `base_bet` from the balance every 10 bets; `milestone_bets/wins/losses/profit` log and set the status.
+- **Uptime** — `uptime_sec` and the closed row's `ended_at` freeze at the bet end during a pause; new `run_uptime_sec` spans cycles; state file gains `pause_remaining_sec`, `pause_total_sec`, `recurring`, `recurring_delay_sec`, `streak_reset_*`, `next_profit_milestone`.
+- **Persistence + SIGHUP** — all new keys are in `_CONFIG_KEYS` and presets ("N:X" strings on disk, null when off). `recurring_delay` and `streak_reset_delay` clamp to 0..86400 on load and reload, with a message. `SIGHUP` reloads live-safe keys (stops, delays, streak keys, milestones, `bet_delay`, `basebet_pct`, profit increment, rules text) and logs the skipped ones; SIGUSR1/SIGUSR2 pause/resume unchanged.
+- **Fix: CFG row.** `Ms` read `last_profit_milestone`, which was never set; it now shows progress inside the current bump window from `next_profit_milestone`. `Rec on(Xs)` now appears (the state file writes `recurring`), plus a new `SR nL→Ss` segment.
+- **Fix: insufficient-balance match.** The HTTP-200 error-body and generic exception paths of `api_place_bet` stopped on any message containing "balance"; they now match "insufficient" only. Insufficient balance stays terminal: no recurring or streak-reset restart.
+- N/A: server auto-bet UUID clearing, `--pipeline`, the mid-chain auto guard (no server auto-bet on crypto.games). No wizard step for the new keys yet (WolfBet Step 5b, E5); set them in the config file + SIGHUP, or presets. Chain-depth warning lands in E5.
+- Tests: `tests/test_wolfbet_sync_e3.py` (25); `test_portability_v1.py` version pin updated.
+
+`VERSION` `1.6.1` → `1.7.0`.
+
 ## TG v1.9.0 — Streak reset, delay caps, analytics window (2026-11-14)
 
 Mirrors WolfBet TG 1.20.0: v2.30.6 (delay cap), v2.32.0 (streak reset), v2.32.1 (insufficient balance terminal), v2.33.0 (time-of-day window). CLI unchanged. Dice only; the `ClientSeed` rotation after each bet is unchanged.
