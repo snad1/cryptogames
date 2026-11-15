@@ -232,6 +232,8 @@ python3 cryptogames.py --config-set lane2.maxloss=0.01 lane3.mult=3
 python3 cryptogames.py --daemon --lane 2 # Run lane 2 (--status/--monitor/--stop take --lane K too)
 python3 cryptogames.py --lanes-status    # One row per lane + totals
 python3 cryptogames.py --benchmark 20 --lanes 4   # Read-only probe at 1..4 clients, recommends a lane count
+python3 cryptogames.py --config-set piscope=run  # Profit increment measures the whole run, not the session
+python3 cryptogames.py --run-reset [--lane K]    # Next start begins a new run total
 ```
 
 ---

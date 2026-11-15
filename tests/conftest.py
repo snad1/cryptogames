@@ -27,7 +27,7 @@ os.environ["APP_ENV"] = "testing"
 os.environ.pop("CRYPTOGAMES_API_BASE", None)
 os.environ["CRYPTOGAMES_TG_DATA"] = os.path.join(_SANDBOX_HOME, "tg")
 os.environ["CRYPTOGAMES_LOG_DIR"] = os.path.join(_SANDBOX_HOME, "logs")
-for _name in ("DB_PATH", "CONFIG_PATH", "STATE_PATH", "PID_PATH", "PRESET_PATH"):
+for _name in ("DB_PATH", "CONFIG_PATH", "STATE_PATH", "PID_PATH", "PRESET_PATH", "RUN_PATH"):
     os.environ[f"CRYPTOGAMES_{_name}"] = os.path.join(_SANDBOX_HOME, _name.lower())
 
 import cryptogames as cg  # noqa: E402
@@ -46,7 +46,7 @@ def sleeps():
 
 @pytest.fixture(autouse=True)
 def _sandbox(tmp_path, monkeypatch, sleeps):
-    for name in ("DB_PATH", "CONFIG_PATH", "STATE_PATH", "PID_PATH", "PRESET_PATH"):
+    for name in ("DB_PATH", "CONFIG_PATH", "STATE_PATH", "PID_PATH", "PRESET_PATH", "RUN_PATH"):
         monkeypatch.setattr(cg, name, str(tmp_path / f"cli_{name.lower()}"))
     monkeypatch.setattr(tg_database, "DATA_DIR", str(tmp_path / "tg"))
     monkeypatch.setattr(cg, "state", cg.BotState())
