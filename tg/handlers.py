@@ -28,6 +28,7 @@ from core.strategy import (
 from shared.core.session_rules import (
     clamp, RECURRING_DELAY_MAX, STREAK_RESET_DELAY_MIN,
 )
+from shared.core.run_increment import parse_scope
 from shared.core.stats import stats_date_window
 from .engine import BettingEngine, STREAK_RESET_REASON
 from .formatter import (
@@ -164,6 +165,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "`milestoneprofit` \u2014 Notify every X profit (0=off)\n"
         "`profitthreshold` \u2014 Auto-raise base bet every X profit (`off` to disable)\n"
         "`profitincrement` \u2014 Amount to add to base bet (`off` to disable)\n"
+        "`piscope` \u2014 Measure the increment per `session` or across the whole `run`\n"
         "`proxy` \u2014 http://user:pass@ip:port or socks5://... (`off` to disable)\n"
         "`recurring` \u2014 Auto-restart on stop condition (`on`/`off`)\n"
         "`recurringdelay` \u2014 Seconds before restart (default 60, 5-86400)\n"
@@ -184,6 +186,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/resume \u2014 Resume (`/resume all` or `/resume 2`)\n"
         "/status \u2014 Live status (`/status 2` for specific slot)\n"
         "/monitor \u2014 Auto-updating status (default 5s)\n"
+        "/runreset \u2014 Start a new run total (run-wide profit increment)\n"
         "/stats \u2014 Session history\n"
         "/session \u2014 Detailed session report\n"
         "/lastbets \u2014 Recent bets\n"
@@ -449,7 +452,8 @@ async def cmd_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pi = config.get("profit_increment")
         pt = config.get("profit_threshold")
         if pi and pt:
-            lines.append(f"Profit increment: `+{float(pi):.8f} every {float(pt):.8f} profit`")
+            scope = " run" if config.get("profit_increment_scope") == "run" else ""
+            lines.append(f"Profit increment: `+{float(pi):.8f} every {float(pt):.8f}{scope} profit`")
 
         ms = []
         mb = config.get("milestone_bets", 100)
@@ -618,23 +622,35 @@ async def cmd_set(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif param in ("milestoneprofit", "msprofit"):
             config["milestone_profit"] = float(value)
         elif param in ("profitthreshold", "pt"):
-            if value.lower() != "off":
+            if value.lower() not in ("off", "none", "0", "0.0"):
                 val = float(value)
-                if val < 0:
-                    await update.message.reply_text("Profit threshold must be > 0 (or 'off').")
-                    return
-                config["profit_threshold"] = val
+                if val <= 0:
+                    config["profit_threshold"] = None
+                    value = "0"
+                else:
+                    config["profit_threshold"] = val
             else:
                 config["profit_threshold"] = None
         elif param in ("profitincrement", "pi"):
-            if value.lower() != "off":
+            if value.lower() not in ("off", "none", "0", "0.0"):
                 val = float(value)
-                if val < 0:
-                    await update.message.reply_text("Profit increment must be >= 0 (or 'off').")
-                    return
-                config["profit_increment"] = val
+                if val <= 0:
+                    config["profit_increment"] = None
+                    value = "0"
+                else:
+                    config["profit_increment"] = val
             else:
                 config["profit_increment"] = None
+        elif param in ("piscope", "pscope", "profitincrementscope"):
+            try:
+                config["profit_increment_scope"] = parse_scope(value)
+            except ValueError:
+                await update.message.reply_text(
+                    "Use: `/set piscope session` or `/set piscope run`",
+                    parse_mode="Markdown")
+                return
+            value = config["profit_increment_scope"]
+            note = "Applies on next start."
         elif param == "recurring":
             if value.lower() in ("on", "true", "yes", "1"):
                 config["recurring"] = True
@@ -954,8 +970,14 @@ async def _notify_stop(chat_id: int, user_id: int, slot: int, reason: str, app):
             # Carry live /set changes to the streak-reset settings into the next cycle.
             for k in ("streak_reset_losses", "streak_reset_delay"):
                 config[k] = live_config.get(k)
-        # Carry forward the current base_bet (profit increment may have raised it)
+        # Carry forward the current base_bet (profit increment may have raised it),
+        # and the base the run bumps stack on, so they never apply twice.
         config["base_bet"] = engine.base_bet
+        config["_run_base_origin"] = getattr(engine, "_run_base_origin", None)
+        # Live /set changes to the increment and its scope reach the next cycle.
+        if live_config is not None:
+            for k in ("profit_increment", "profit_threshold", "profit_increment_scope"):
+                config[k] = live_config.get(k)
         label = "Streak reset" if is_streak_reset else "Recurring"
         await _safe_send(app,
             chat_id,
@@ -1271,6 +1293,21 @@ async def cmd_tweak(update: Update, context: ContextTypes.DEFAULT_TYPE):
             changes["profit_increment"] = None if off else float(value)
         elif param in ("profitthreshold", "pt"):
             changes["profit_threshold"] = None if off else float(value)
+        elif param in ("piscope", "pscope", "profitincrementscope"):
+            # Saved for the next session; the running engine keeps its scope.
+            cfg = load_user_config(user_id)
+            try:
+                cfg["profit_increment_scope"] = parse_scope(value)
+            except ValueError:
+                await update.message.reply_text(
+                    "Use: `/tweak piscope session` or `/tweak piscope run`",
+                    parse_mode="Markdown")
+                return
+            save_user_config(user_id, cfg)
+            await update.message.reply_text(
+                f"piscope = `{cfg['profit_increment_scope']}` (applies on next start)",
+                parse_mode="Markdown")
+            return
         else:
             await update.message.reply_text(f"Unknown tweak param: `{param}`\nUse `/tweak` for options.", parse_mode="Markdown")
             return
@@ -1280,6 +1317,23 @@ async def cmd_tweak(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     result = await engine.mutate(changes)
     await update.message.reply_text(f"Tweaked slot {slot}: {result}", parse_mode="Markdown")
+
+
+# ── /runreset ────────────────────────────────────────────
+async def cmd_runreset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start a new run total for profit_increment_scope=run."""
+    user_id = update.effective_user.id
+    if _get_running(user_id) or recurring_state.get(user_id):
+        await _reply(update, "Stop your sessions first (`/stop recurring`), then /runreset — "
+                             "running sessions hold the run's raised base bet.",
+                     parse_mode="Markdown")
+        return
+    try:
+        os.remove(os.path.join(os.path.dirname(user_db_path(user_id)), "run.json"))
+        msg = "Run total reset. The next /bet starts a new run (base bet from /config)."
+    except OSError:
+        msg = "No run total to reset."
+    await _reply(update, msg)
 
 
 # ── /pause ───────────────────────────────────────────────
@@ -1516,6 +1570,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "noop":
         return
+
 
     action, slot = _parse_callback_slot(query.data)
 

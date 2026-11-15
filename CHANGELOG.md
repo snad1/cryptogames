@@ -1,5 +1,32 @@
 # Changelog
 
+## CLI v1.12.0 — Run-wide profit increment (2026-11-15)
+
+Mirrors WolfBet CLI v2.37.0 (`profit_increment_scope` / `piscope`, `0b7e71a`). Until now the increment only measured the current session and the milestone reset at every recurring or streak-reset cycle, so a large `profit_threshold` was never reached with many short cycles.
+
+- **Scope** — `profit_increment_scope` (`piscope`, `pscope`) is `session` (default, unchanged) or `run`: profit = the sum of this lane's sessions since the run started (from the stats DB) + the current session, and the milestone is kept across cycles and restarts. Set with the wizard (asked after the increment prompts), `--config-set piscope=run` (validated, exit 2 on a bad value, applies on next start) and `--config-show`.
+- **Run file** — per lane `~/.cryptogames_run.json` / `.laneK.json` (`CRYPTOGAMES_RUN_PATH`): `{first_session, started_at, bumps}`. On start `base_bet = configured base + bumps × profit_increment`, next milestone `(bumps + 1) × threshold`; the bump stacks on the lane's split base. A run file past the DB's last session (stats reset) starts a new run. Written on a bump only, never per bet.
+- **Off values** — `pi` / `pt` = `none` / `off` / `0` / `0.0` (or ≤ 0) mean fully off: no bumps, no run; the run file is removed at start and on SIGHUP reload. Re-enabling starts a fresh run.
+- **Display** — `--status` shows `Run Profit` (since #N, bumps, next milestone) in run scope; the monitor and dashboard progress row show `RunMs` measured on the run total.
+- **`--run-reset [--lane K]`** — deletes the run file(s); the next start begins a new run total. ctl `run-reset` / `reset` is Epic 7.
+- N/A: the auto-UUID restart on a bump (crypto.games has no server auto-bet; the bumped base applies to the next bet).
+- Tests: `tests/test_wolfbet_sync_e10.py` (37). `test_portability_v1.py` pins 1.12.0.
+
+`VERSION` `1.11.0` → `1.12.0`.
+
+## TG v1.10.0 — Run-wide profit increment (2026-11-15)
+
+Mirrors WolfBet TG v1.21.0 (`58d6e4d`), the Telegram counterpart of CLI v2.37.0.
+
+- **Scope** — `/set piscope session|run` (validated), `/tweak piscope` (saved, applies on next start), `/config` and `/status` show it. `pi` / `pt` now treat `0` / `0.0` / `none` as off.
+- **One run per user, across slots** — `<user dir>/run.json` is the single source of the run: `bumps`, the first session and the total. A second slot joins the run instead of starting one, and picks up a sibling's bumps and profit on the periodic save (never on the bet path).
+- **`_run_base_origin`** — bumps are `origin + bumps × increment`, where the origin is the configured base. It rides the engine snapshot and the recurring config, so a resumed or restarted session never applies the bumps twice. With `basebet_pct` the base keeps coming from the balance and the bumps are not added.
+- **`/runreset`** — refuses while a session runs or a recurring restart is pending (a live engine holds the raised base bet); otherwise it removes the run file so the next `/bet` starts a new run.
+- N/A: the auto-UUID restart on a bump.
+- Tests: `tests/test_wolfbet_sync_e10.py`, TG half.
+
+`VERSION` `1.9.0` → `1.10.0`.
+
 ## CLI v1.11.0 — Lane split minimum bet (2026-11-15)
 
 Completes WolfBet CLI v2.36.0 (`lane_split`, `6174b96`) with the cryptogames adapt from backlog Epic 9. The rest of v2.36.0 shipped in 1.10.0. TG unchanged.
