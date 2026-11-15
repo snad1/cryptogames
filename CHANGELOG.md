@@ -1,5 +1,16 @@
 # Changelog
 
+## CLI v1.11.0 — Lane split minimum bet (2026-11-15)
+
+Completes WolfBet CLI v2.36.0 (`lane_split`, `6174b96`) with the cryptogames adapt from backlog Epic 9. The rest of v2.36.0 shipped in 1.10.0. TG unchanged.
+
+- **Minimum bet** — crypto.games has no fixed minimum; it is per coin. At bot start the CLI now reads `MinimumBet` once from `GET /v1/settings/{coin}`. In `bet` / `both`, a split `base_bet` or `basebet_pct` bet below that minimum stays full, with a warning in the log. Before, the divided bet was sent and the API could refuse it. Same on SIGHUP reload; an untouched full bet is still saved as is. A lane's own `base_bet` override is never divided. If the settings call fails, the minimum stays 0 (logged) and only the round-to-0 rule applies. Uses `lane_config(..., min_bet)` and `split_base_bet` from casino-shared 0.3.0.
+- **No default change** — cryptogames 1.10.0 already shipped `lane_split=none` as the default, so lanes never had the always-on v2.35.0 budget guard here. The budget stop applies only with `lane_split=budget` or `both`, as before.
+- N/A: nothing new.
+- Tests: `tests/test_wolfbet_sync_e9.py` (14). `test_portability_v1.py` pins 1.11.0.
+
+`VERSION` `1.10.0` → `1.11.0`.
+
 ## CLI v1.10.0 — Parallel lanes (2026-11-14)
 
 Mirrors WolfBet CLI v2.35.0 (parallel lanes) and v2.36.0 (`lane_split`; where the two differ the v2.36.0 code wins). All lane logic comes from `shared.core.lanes`; cryptogames keeps only the state glue. TG unchanged.

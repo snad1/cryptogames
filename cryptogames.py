@@ -52,7 +52,7 @@ from shared.core.stats import stats_date_window, fmt_duration, sessions_time_spa
 from shared.core.lanes import (
     LANES_MAX, LANE_UNSET_VALUES, LANE_SPLIT_HELP,
     lane_path, validate_lane, lanes_count, lane_split, lane_config,
-    lane_overrides, split_budget_on, split_bet_divisor, split_lane_pairs,
+    lane_overrides, split_budget_on, split_base_bet, split_lane_pairs,
     check_lane_keys, lane_share, lane_equity, lane_budget_exceeded,
     recommend_lanes,
 )
@@ -73,7 +73,7 @@ STATE_PATH   = os.environ.get("CRYPTOGAMES_STATE_PATH",   os.path.expanduser("~/
 PID_PATH     = os.environ.get("CRYPTOGAMES_PID_PATH",     os.path.expanduser("~/.cryptogames_autobot.pid"))
 PRESET_PATH  = os.environ.get("CRYPTOGAMES_PRESET_PATH",  os.path.expanduser("~/.cryptogames_presets.json"))
 LOG_DIR      = os.environ.get("CRYPTOGAMES_LOG_DIR",      os.path.expanduser("~/.cryptogames_logs"))
-VERSION      = "1.10.0"
+VERSION      = "1.11.0"
 APP_ENV      = os.environ.get("APP_ENV", "production")
 
 # ── Daily rotating logger ──
@@ -289,12 +289,17 @@ def _apply_lane_config(data: dict) -> None:
     lane's overrides + bet split on top of the base values already applied."""
     state.lanes_count = lanes_count(data)
     state.lane_split = lane_split(data)
-    merged, warning = lane_config(data, state.lane, _LANE_FORBIDDEN_KEYS)
+    # v1.11.0 (WolfBet v2.36.0) — a split bet below the coin minimum stays
+    # full; the minimum is only known after connecting (_load_min_bet).
+    merged, warning = lane_config(data, state.lane, _LANE_FORBIDDEN_KEYS, state.min_bet)
     if warning:
         logger.warning(warning)
     state.base_bet_disk = data.get("base_bet")
+    # Only a divided bet, not a laneK.base_bet override (never divided).
+    overridden = "base_bet" in lane_overrides(data, state.lane, _LANE_FORBIDDEN_KEYS)
     state.base_bet_split = (merged.get("base_bet")
-                            if merged.get("base_bet") != data.get("base_bet") else None)
+                            if not overridden
+                            and merged.get("base_bet") != data.get("base_bet") else None)
     changed = {k: v for k, v in merged.items()
                if (k in _CONFIG_KEYS or k in _STREAK_TUPLE_KEYS)
                and not (k in data and data[k] == v)}
@@ -361,7 +366,7 @@ def _reload_live_config() -> dict:
         logger.warning("live reload: failed to parse config: %s", e)
         return {}
     # v1.10.0 (WolfBet v2.35.0 / v2.36.0) — this lane's overrides + bet split.
-    data = lane_config(data, state.lane, _LANE_FORBIDDEN_KEYS)[0]
+    data = lane_config(data, state.lane, _LANE_FORBIDDEN_KEYS, state.min_bet)[0]
     applied, skipped = {}, []
     tuple_keys = set(_STREAK_TUPLE_KEYS)
     with state.lock:
@@ -652,6 +657,8 @@ class BotState:
         # On-disk vs split base bet, so save_config never writes the split one.
         self.base_bet_disk   = None
         self.base_bet_split  = None
+        # v1.11.0 — coin minimum bet (GET /v1/settings/{coin}); 0 = unknown.
+        self.min_bet         = 0.0
 
 
 state   = BotState()
@@ -1267,13 +1274,38 @@ def _init_lane_budget() -> None:
                        state.current_balance)
 
 
+def _load_min_bet() -> None:
+    """v1.11.0 (WolfBet v2.36.0 adapt) — read the coin's minimum bet once at
+    bot start, then undo a load-time bet split that falls below it."""
+    try:
+        state.min_bet = float(api_get_settings(state.currency).get("MinimumBet") or 0)
+    except Exception as e:
+        state.min_bet = 0.0
+        logger.warning("min bet: settings lookup failed (%s) — split check uses 0", _redact(e))
+        return
+    split = state.base_bet_split
+    if split is None or state.base_bet != split:
+        return
+    full, note = split_base_bet(state.base_bet_disk, state.lanes_count,
+                                state.lane_split, False, state.min_bet)
+    if note:
+        logger.warning(note)
+        with state.lock:
+            state.base_bet = state.current_bet = full
+        state.base_bet_split = None
+
+
 def _apply_basebet_pct() -> bool:
     """Recompute base_bet as basebet_pct × balance. Returns True if it changed."""
     if state.basebet_pct <= 0 or state.current_balance <= 0:
         return False
     # v1.10.0 (WolfBet v2.36.0) — bet split divides by the lane count.
-    new_base = round(state.current_balance * state.basebet_pct
-                     / split_bet_divisor(state.lanes_count, state.lane_split), 8)
+    # v1.11.0 — a split bet that rounds to 0 or is below the coin minimum stays full.
+    new_base, note = split_base_bet(
+        round(state.current_balance * state.basebet_pct, 8),
+        state.lanes_count, state.lane_split, False, state.min_bet)
+    if note:
+        logger.warning(note)
     if new_base <= 0 or abs(new_base - state.base_bet) < 1e-12:
         return False
     with state.lock:
@@ -5140,6 +5172,8 @@ def main():
 
     _startup_purge()   # v1.9.0 — WolfBet v2.26.0 retention
 
+    # v1.11.0 — coin minimum bet for the lane split (WolfBet v2.36.0 adapt).
+    _load_min_bet()
     # v1.10.0 (WolfBet v2.35.0) — split budget; lane K>1 staggers its first bet.
     _init_lane_budget()
     if state.lane > 1:
