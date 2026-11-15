@@ -1,4 +1,4 @@
-"""Test sandbox + fake casino fixtures (E0-S2).
+"""Test sandbox + fake casino fixtures.
 
 Module top runs before any test imports `cryptogames` or `tg`: path constants
 are bound at import from CRYPTOGAMES_* / CRYPTOGAMES_TG_DATA / HOME, so they
@@ -24,6 +24,8 @@ for _p in (_ROOT, _CASINO):
 _SANDBOX_HOME = tempfile.mkdtemp(prefix="cryptogames_home_")
 os.environ["HOME"] = _SANDBOX_HOME
 os.environ["APP_ENV"] = "testing"
+os.environ.setdefault("CRYPTOGAMES_WEB_SECRET_KEY", "test-secret-key-for-the-suite-12345678")
+os.environ.setdefault("CRYPTOGAMES_WEB_ADMIN_PASS", "test-admin-pass-1234")
 os.environ.pop("CRYPTOGAMES_API_BASE", None)
 os.environ["CRYPTOGAMES_TG_DATA"] = os.path.join(_SANDBOX_HOME, "tg")
 os.environ["CRYPTOGAMES_LOG_DIR"] = os.path.join(_SANDBOX_HOME, "logs")
@@ -77,7 +79,7 @@ def cli_state(fake_casino, monkeypatch):
         api = fake_casino.requests_api()
         monkeypatch.setattr(cg.requests, "get", api.get)
         monkeypatch.setattr(cg.requests, "post", api.post)
-        # v1.9.0 — the CLI calls the API through `_http_session` (proxy support).
+        # v1.9.0: the CLI calls the API through `_http_session` (proxy support).
         monkeypatch.setattr(cg._http_session, "get", api.get)
         monkeypatch.setattr(cg._http_session, "post", api.post)
         cg.init_db()

@@ -1,4 +1,4 @@
-"""Portability port v1 — locks the wolfbet v2.27-v2.30 hardening subset.
+"""Portability port v1: locks the wolfbet v2.27-v2.30 hardening subset.
 
 Run: APP_ENV=testing python3 -m pytest cryptogames/tests/ -q
 """
@@ -49,11 +49,11 @@ def _mk_engine(db):
 
 # ── VERSION ───────────────────────────────────────────────
 def test_cli_version():
-    assert cg.VERSION == "1.12.0"
+    assert cg.VERSION == "1.12.1"
 
 
 def test_tg_version():
-    assert tg.VERSION == "1.10.0"
+    assert tg.VERSION == "1.10.1"
 
 
 # ── PRAGMAs ───────────────────────────────────────────────
@@ -318,7 +318,7 @@ def test_argparse_has_since_until():
 def test_tg_analytics_parses_date_window():
     src = inspect.getsource(tg_handlers.cmd_analytics)
     assert "context.args" in src
-    # v1.9.0: the window clause comes from shared.core.stats (E2-S4).
+    # v1.9.0: the window clause comes from shared.core.stats.
     assert "stats_date_window(since, until)" in src
     assert src.count("FROM sessions{where}") >= 5
     assert "'Range' if window_label else 'Lifetime'" in src

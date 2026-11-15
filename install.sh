@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────
-#  CryptoGames AutoBot — Server Installer v1.0
+#  CryptoGames AutoBot: Server Installer v1.0
 #  Sets up: CLI bot + Telegram bot, venv, systemd, cgctl
 # ─────────────────────────────────────────────────────────
 set -euo pipefail
@@ -14,20 +14,20 @@ ENV_FILE="$INSTALL_DIR/.env"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║   CryptoGames AutoBot — Server Installer v1.0        ║"
+echo "║   CryptoGames AutoBot: Server Installer v1.0        ║"
 echo "║   CLI Bot + Telegram Bot                              ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 
 # ── 1. System dependencies ─────────────────────────────
-echo "[1/7] Installing system packages…"
+echo "[1/7] Installing system packages..."
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
     python3 python3-pip python3-venv python3-dev \
     sqlite3 tmux curl
 
 # ── 2. Bot directory ───────────────────────────────────
-echo "[2/7] Setting up bot directory…"
+echo "[2/7] Setting up bot directory..."
 mkdir -p "$INSTALL_DIR"
 cp cryptogames.py   "$INSTALL_DIR/"
 cp requirements.txt "$INSTALL_DIR/"
@@ -59,7 +59,7 @@ else
 fi
 
 # ── 3. Environment file ───────────────────────────────
-echo "[3/7] Setting up environment…"
+echo "[3/7] Setting up environment..."
 if [ ! -f "$ENV_FILE" ]; then
     if [ -f ".env" ]; then
         cp .env "$ENV_FILE"
@@ -70,7 +70,7 @@ if [ ! -f "$ENV_FILE" ]; then
         echo "   ⚠ EDIT THIS FILE: nano $ENV_FILE"
     else
         cat > "$ENV_FILE" << 'ENVEOF'
-# CryptoGames AutoBot — Environment
+# CryptoGames AutoBot: Environment
 # Get your Telegram bot token from @BotFather
 CRYPTOGAMES_TG_TOKEN=
 CRYPTOGAMES_TG_DATA=~/.cryptogames_tg
@@ -81,21 +81,22 @@ ENVEOF
 else
     echo "   $ENV_FILE already exists (kept)"
 fi
+chmod 600 "$ENV_FILE"
 
 # ── 4. Python virtual environment ─────────────────────
-echo "[4/7] Creating Python virtual environment…"
+echo "[4/7] Creating Python virtual environment..."
 python3 -m venv "$INSTALL_DIR/venv"
 "$INSTALL_DIR/venv/bin/pip" install --quiet --upgrade pip
 "$INSTALL_DIR/venv/bin/pip" install --quiet -r "$INSTALL_DIR/requirements.txt"
 
 # ── 5. Systemd services ───────────────────────────────
-echo "[5/7] Setting up systemd services…"
+echo "[5/7] Setting up systemd services..."
 mkdir -p "$SYSTEMD_DIR"
 
 # CLI bot service
 cat > "$SYSTEMD_DIR/${SERVICE_NAME}.service" << SERVICEEOF
 [Unit]
-Description=CryptoGames AutoBot — Dice Auto-Betting Engine (CLI)
+Description=CryptoGames AutoBot: Dice Auto-Betting Engine (CLI)
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=0
@@ -123,7 +124,7 @@ SERVICEEOF
 # Telegram bot service
 cat > "$SYSTEMD_DIR/${TG_SERVICE_NAME}.service" << TGSERVICEEOF
 [Unit]
-Description=CryptoGames AutoBot — Telegram Bot
+Description=CryptoGames AutoBot: Telegram Bot
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=0
@@ -151,7 +152,7 @@ TGSERVICEEOF
 # Watchdog: restart TG bot if heartbeat file is stale (catches stuck-but-alive)
 cat > "$SYSTEMD_DIR/${TG_SERVICE_NAME}-watchdog.service" << WDSERVICEEOF
 [Unit]
-Description=CryptoGames Telegram Bot — Stall Watchdog
+Description=CryptoGames Telegram Bot: Stall Watchdog
 After=${TG_SERVICE_NAME}.service
 
 [Service]
@@ -161,7 +162,7 @@ WDSERVICEEOF
 
 cat > "$SYSTEMD_DIR/${TG_SERVICE_NAME}-watchdog.timer" << WDTIMEREOF
 [Unit]
-Description=CryptoGames Telegram Bot — Stall Watchdog Timer (every 2 min)
+Description=CryptoGames Telegram Bot: Stall Watchdog Timer (every 2 min)
 
 [Timer]
 OnBootSec=3min
@@ -182,13 +183,13 @@ echo "     ${SERVICE_NAME}.service     (CLI bot)"
 echo "     ${TG_SERVICE_NAME}.service  (Telegram bot)"
 
 # ── 6. Management CLI ─────────────────────────────────
-echo "[6/7] Creating cgctl management command…"
+echo "[6/7] Creating cgctl management command..."
 mkdir -p "$HOME/.local/bin"
 cp cgctl "$CGCTL"
 chmod +x "$CGCTL"
 
 # ── 7. Quick-run scripts ──────────────────────────────
-echo "[7/7] Creating helper scripts…"
+echo "[7/7] Creating helper scripts..."
 
 cat > "$INSTALL_DIR/run.sh" << 'EOF'
 #!/usr/bin/env bash

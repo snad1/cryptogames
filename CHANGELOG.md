@@ -1,5 +1,27 @@
 # Changelog
 
+## Security hotfixes: web, Telegram and limits (2026-11-15)
+
+### Web admin
+- `CRYPTOGAMES_WEB_SECRET_KEY` and `CRYPTOGAMES_WEB_ADMIN_PASS` must be non-default (32+ bytes, 12+ chars); the app exits before binding.
+- The installer generates the secret, prompts for or generates the password, writes `.env` with `printf` at 0600, refuses a weak existing `.env`, and always binds uvicorn to `127.0.0.1`.
+- Login lockout and single-use Telegram links are wired through the shared auth router.
+- Every `/api/users/{user_id}/...` route uses `require_user_access`.
+- `web/bot_db.py` exports the bound `_connect_ro(user_id)`, so the live session socket resolves.
+- The admin user page renders this service's secret keys as `hidden`.
+
+### Telegram
+- `/update` answers only to `TG_OWNER_ID`, with no fallback id and a startup warning when it is missing; the launcher is an argv list for `systemd-run` with validated paths and a 0600 log under the data dir.
+- `/set` and `/tweak` reject `nan` and `inf` for every numeric parameter, and the CLI config-set path uses the same check.
+
+### Updates
+- `cgctl update` installs the pinned requirements and stops when the install fails.
+
+### Log redaction
+- The Telegram log handler uses `RedactingFormatter`, every engine registers its key, and technical error text is redacted before it reaches journald. `install.sh` now writes `.env` 0600.
+
+**Version**: see the module constants; `casino-shared` pinned to the dashboard branch.
+
 ## CLI v1.12.0 — Run-wide profit increment (2026-11-15)
 
 Mirrors WolfBet CLI v2.37.0 (`profit_increment_scope` / `piscope`, `0b7e71a`). Until now the increment only measured the current session and the milestone reset at every recurring or streak-reset cycle, so a large `profit_threshold` was never reached with many short cycles.
@@ -69,7 +91,7 @@ Mirrors WolfBet CLI v2.17.0 and v2.30.3–v2.30.5 (metrics), v2.18.0 (wizard Ste
 - **Monitor** — footer hint line and `Keys:` banner; `S` stops through `systemctl --user stop cryptogames` when the daemon runs in that unit, else SIGTERM.
 - **Fix: API key leaks.** crypto.games puts the key in the URL path, and a failed request quoted it in the log, `last_error` (state file, `--status`, dashboard) and connect errors. A redacting log formatter (tracebacks too) and `_redact` on errors now mask it.
 - **Fix: dead `--status` "Rate Limit" row** (always `?/?`) removed.
-- N/A: pipelining (`pipeline_depth`), the rate-limit / `/auto/start` quota rows (no quota headers, no server auto-bet), auto-bet UUID clearing, `bet_value` derivation (crypto.games takes `Payout` + `UnderOver`). Parallel lanes and `--benchmark --lanes` are E5-S9.
+- N/A: pipelining (`pipeline_depth`), the rate-limit / `/auto/start` quota rows (no quota headers, no server auto-bet), auto-bet UUID clearing, `bet_value` derivation (crypto.games takes `Payout` + `UnderOver`). Parallel lanes and `--benchmark --lanes` are.
 - Tests: `tests/test_wolfbet_sync_e5.py` (102). `tests/conftest.py` now patches `_http_session` and fails any unpatched live request; `test_portability_v1.py` pins 1.9.0.
 
 `VERSION` `1.8.0` → `1.9.0`.

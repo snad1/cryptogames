@@ -1,3 +1,3 @@
-"""CryptoGames Admin Web App — Dashboard & management for CryptoGames AutoBot."""
+"""CryptoGames Admin Web App: Dashboard & management for CryptoGames AutoBot."""
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
