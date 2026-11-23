@@ -217,6 +217,142 @@ def test_live_reload_increment_on_starts_run(cli_state):
     assert Path(cg.RUN_PATH).exists()
 
 
+
+# ── the base the operator sets is the base it bets ───────────────────
+def _bumped_daemon(cli_state, bumps=5, profit=0.12):
+    """A run-scope daemon on base 0.01 whose live base carries `bumps` bumps."""
+    cli_state(max_bets=1, base_bet=0.01)
+    _arm()
+    cg.state.running = False
+    cg.save_config()
+    s = cg.state
+    s.base_bet_disk, s.base_bet_split, s.base_bet_lane = 0.01, None, 0.01
+    s.run_profit_done = 0.0
+    cg._attach_run(s.session_id)
+    s.run_bumps = bumps
+    s.base_bet = s.current_bet = round(0.01 + bumps * 0.001, 8)
+    s.profit = profit
+    cg._save_run()
+    return s
+
+
+def _edit_config(**vals):
+    data = json.loads(Path(cg.CONFIG_PATH).read_text())
+    data.update(vals)
+    Path(cg.CONFIG_PATH).write_text(json.dumps(data))
+
+
+def test_live_base_change_zeroes_bumps_and_reanchors(cli_state):
+    s = _bumped_daemon(cli_state)
+    _edit_config(base_bet=0.02)
+
+    applied = cg._reload_live_config()
+
+    assert "base_bet" in applied
+    assert s.base_bet == pytest.approx(0.02) and s.current_bet == pytest.approx(0.02)
+    assert s.run_bumps == 0 and s.run_base_origin == pytest.approx(0.02)
+    assert s.next_profit_milestone == pytest.approx(0.15)     # above run profit 0.12
+    run = json.loads(Path(cg.RUN_PATH).read_text())
+    assert run["bumps"] == 0 and run["base"] == pytest.approx(0.02)
+
+
+def test_unrelated_reload_keeps_the_bumps(cli_state):
+    s = _bumped_daemon(cli_state)
+    _edit_config(max_loss=5.0)
+
+    applied = cg._reload_live_config()
+
+    assert "base_bet" not in applied
+    assert s.run_bumps == 5 and s.base_bet == pytest.approx(0.015)
+
+
+def test_lane_base_override_is_not_a_base_change(cli_state):
+    cli_state(max_bets=1, base_bet=0.01)
+    cg.state.running = False
+    cg.save_config()
+    _edit_config(lanes={"count": 2, "overrides": {"2": {"base_bet": 0.03}}})
+    cg.state = cg.BotState()
+    cg.state.lane = 2
+    assert cg.load_config()
+    assert cg.state.base_bet == pytest.approx(0.03)
+
+    applied = cg._reload_live_config()
+
+    assert "base_bet" not in applied
+
+
+def test_base_change_without_a_run_only_sets_the_bet(cli_state):
+    cli_state(max_bets=1, base_bet=0.01)
+    _arm(scope="session")
+    cg._rebase_run_for_base_change(0.02)
+    assert cg.state.base_bet == pytest.approx(0.02)
+    assert cg.state.current_bet == pytest.approx(0.02)
+    assert not Path(cg.RUN_PATH).exists()
+
+
+def test_resume_drops_bumps_earned_on_another_base(cli_state):
+    cli_state(max_bets=1, base_bet=0.01)
+    _arm()
+    sids = _sessions([(0.12, 1)])
+    Path(cg.RUN_PATH).write_text(json.dumps(
+        {"first_session": sids[0], "started_at": "x", "bumps": 4, "base": 0.02}))
+    cg._init_run()
+    assert cg.state.run_bumps == 0
+    assert cg.state.base_bet == pytest.approx(0.01)
+    assert cg.state.next_profit_milestone == pytest.approx(0.15)  # above run profit 0.12
+    assert json.loads(Path(cg.RUN_PATH).read_text())["base"] == pytest.approx(0.01)
+
+
+def test_resume_applies_bumps_on_the_same_base(cli_state):
+    cli_state(max_bets=1, base_bet=0.01)
+    _arm()
+    sids = _sessions([(0.12, 1)])
+    Path(cg.RUN_PATH).write_text(json.dumps(
+        {"first_session": sids[0], "started_at": "x", "bumps": 2, "base": 0.01}))
+    cg._init_run()
+    assert cg.state.run_bumps == 2
+    assert cg.state.base_bet == pytest.approx(0.012)
+
+
+def test_legacy_run_file_keeps_bumps_once_and_adopts_the_base(cli_state):
+    cli_state(max_bets=1, base_bet=0.01)
+    _arm()
+    sids = _sessions([(0.12, 1)])
+    _write_run(cg.RUN_PATH, sids[0], bumps=2)
+    cg._init_run()
+    assert cg.state.run_bumps == 2
+    assert cg.state.run_base_origin == pytest.approx(0.01)
+    assert json.loads(Path(cg.RUN_PATH).read_text())["base"] == pytest.approx(0.01)
+
+
+def test_config_show_reports_the_live_base(cli_state, capsys, monkeypatch):
+    cli_state(max_bets=1, base_bet=0.01)
+    cg.state.running = False
+    cg.save_config()
+    monkeypatch.setattr(cg, "_monitor_read_state",
+                        lambda: {"pid": 4242, "base_bet": 0.015, "run_bumps": 5})
+    monkeypatch.setattr(cg, "_monitor_get_pid", lambda d: 4242)
+    monkeypatch.setattr(cg.console, "width", 250)
+    cg.cmd_config_show()
+    out = capsys.readouterr().out
+    assert "live 0.01500000" in out and "+5 bumps" in out
+
+
+def test_config_show_without_a_daemon_shows_the_file_only(cli_state, capsys):
+    cli_state(max_bets=1, base_bet=0.01)
+    cg.state.running = False
+    cg.save_config()
+    cg.cmd_config_show()
+    assert "live " not in capsys.readouterr().out
+
+
+def test_ctl_start_reports_an_already_active_unit():
+    src = (Path(cg.__file__).parent / "cgctl").read_text()
+    start = src[src.index("cmd_start()"):src.index("cmd_stop()")]
+    assert "was_active" in start
+    assert "already running" in start
+    assert "cgctl restart" in start
+
 # ── the bump never touches the DB ─────────────────────────────────────
 def test_bump_does_no_db_query(cli_state, monkeypatch):
     cli_state(max_bets=1)
