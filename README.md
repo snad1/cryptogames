@@ -1,4 +1,4 @@
-# CryptoGames AutoBot v1.6.0 + Telegram Bot v1.8.0
+# CryptoGames AutoBot v1.13.0 + Telegram Bot v1.10.1
 
 High-speed auto-betting engine for crypto.games Dice with a live dashboard, Telegram bot, and web admin panel. Runs on any server or local machine — leave it running and manage via CLI, Telegram, or browser.
 
@@ -95,6 +95,27 @@ cgctl monitor           # Attach live TUI to running daemon
 cgctl status            # Check running session status
 cgctl stats             # Show all-time session statistics (--since/--until DATE, --lane K)
 cgctl analytics         # Aggregates: by game, strategy, lane, top 5 best / worst
+cgctl restart               # Restart the bot (every lane)
+cgctl lanes [N] [--split none|budget|bet|both]  # Show or set parallel lanes (1-10)
+cgctl logs                  # Stream live logs
+cgctl logs-full             # Show last 200 log lines
+cgctl diagnose              # Bottleneck analysis of the running session
+cgctl benchmark [N] [--lanes M]  # Time N probe requests
+cgctl doctor [--fix] [--yes]  # Health check; --fix applies safe fixes
+cgctl tmux                  # Run monitor in a detachable tmux session
+cgctl config-set KEY=VALUE ...  # Change saved keys; a running daemon reloads
+cgctl session ID            # Full stats + streak distribution for a session
+cgctl last-bets [N]         # Last N bets across all sessions (default 20)
+cgctl presets               # List saved presets
+cgctl export PATH [SID]     # Export a session (CSV, or JSON by .json extension)
+cgctl backtest [args]       # Backtest / replay offline (no API calls, no real balance)
+cgctl cleanup [DAYS]        # Purge bet rows of old sessions (default: purge_days)
+cgctl reset [--yes]         # Archive the stats DB and start fresh (never deletes)
+cgctl archives              # List archived stats DBs
+cgctl run-reset [--yes]     # New run total for the run-wide profit increment
+cgctl update                # Pull, reinstall requirements, restart what was running
+cgctl refresh               # Reinstall cgctl from the repo copy in this folder
+cgctl version               # Bot and cgctl versions
 
 cgctl tg env            # Edit .env (set Telegram token)
 cgctl tg start          # Start Telegram bot
@@ -156,6 +177,11 @@ The Telegram bot provides full betting control from your phone. Each Telegram us
 | `/benchmark` | Test API response speed |
 | `/cleanup [days]` | Purge old bet records (default 3 days), keep session stats |
 | `/delsession <id>` | Delete a specific session and its bets |
+| `/update` | Pull the latest code and restart the bot (owner only) |
+| `/tweak <param> <value>` | Change a setting of a running session (e.g. `/tweak delay 0.1`) |
+| `/diagnose` | Bottleneck analysis of a running session |
+| `/analytics [since] [until]` | Lifetime or date-windowed analytics (e.g. `/analytics 2026-08-14`) |
+| `/runreset` | Start a new run total for `piscope run` (asks to confirm; stop sessions first) |
 
 ---
 
@@ -234,6 +260,14 @@ python3 cryptogames.py --lanes-status    # One row per lane + totals
 python3 cryptogames.py --benchmark 20 --lanes 4   # Read-only probe at 1..4 clients, recommends a lane count
 python3 cryptogames.py --config-set piscope=run  # Profit increment measures the whole run, not the session
 python3 cryptogames.py --run-reset [--lane K]    # Next start begins a new run total
+python3 cryptogames.py --version        # Print the version
+python3 cryptogames.py --list-presets   # Show saved presets
+python3 cryptogames.py --config-show    # Print the saved config (secrets masked)
+python3 cryptogames.py --diagnose       # Bottleneck analysis of the running daemon
+python3 cryptogames.py --cleanup [DAYS]  # Purge bet rows of sessions ended > DAYS ago (default purge_days)
+python3 cryptogames.py --export ~/s12.csv --export-session-id 12  # Export a session (.json = JSON, else CSV; default latest)
+python3 cryptogames.py --backtest --simulate 10000 --seed 42  # Offline backtest: no API calls, no real balance
+python3 cryptogames.py --backtest --replay-session 12  # Replay a stored session's outcomes offline
 ```
 
 ---
