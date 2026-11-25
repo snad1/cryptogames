@@ -1,7 +1,7 @@
-"""WolfBet sync E5-S9: cryptogames CLI parallel lanes (CLI v1.10.0).
+"""Cryptogames CLI parallel lanes (CLI v1.10.0).
 
 Mirrors WolfBet v2.35.0 (parallel lanes) and v2.36.0 (`lane_split`). Lane
-helpers come from shared.core.lanes (E1-S5). Reference test:
+helpers come from shared.core.lanes. Reference test:
 wolfbet/tests/test_phase10_lanes.py. N/A on cryptogames: soft pacing and the
 /auto/start lock (no server auto-bet, no rate-limit quota headers).
 
@@ -89,12 +89,12 @@ def test_apply_lane_switches_paths_and_log_prefix():
 
 
 def test_lane_log_prefix_still_masks_key():
-    cg.state.api_key = "abcdefgh12345678SECRET"
+    cg.state.api_key = "abcdefgh12345678EXAMPLE"
     cg._apply_lane(2)
     rec = logging.LogRecord("cryptogames", logging.WARNING, __file__, 1,
-                            "url /v1/balance/doge/abcdefgh12345678SECRET", (), None)
+                            "url /v1/balance/doge/abcdefgh12345678EXAMPLE", (), None)
     out = cg._log_handler.format(rec)
-    assert "[L2]" in out and "abcdefgh12345678SECRET" not in out
+    assert "[L2]" in out and "abcdefgh12345678EXAMPLE" not in out
 
 
 def test_apply_lane_one_keeps_classic_paths():
@@ -107,18 +107,18 @@ def test_apply_lane_one_keeps_classic_paths():
     assert cg.state.lane == 1
 
 
-@pytest.mark.parametrize("bad", [0, 11, -1])
+@pytest.mark.parametrize("bad", [0, 100, -1])
 def test_apply_lane_range(bad):
     with pytest.raises(ValueError):
         cg._apply_lane(bad)
 
 
 def test_main_bad_lane_exits_2(monkeypatch, capsys):
-    monkeypatch.setattr(sys, "argv", ["cryptogames.py", "--status", "--lane", "11"])
+    monkeypatch.setattr(sys, "argv", ["cryptogames.py", "--status", "--lane", "100"])
     with pytest.raises(SystemExit) as e:
         cg.main()
     assert e.value.code == 2
-    assert "--lane must be 1-10" in capsys.readouterr().out
+    assert "--lane must be 1-99, got 100" in capsys.readouterr().out
 
 
 def test_status_with_lane_reads_lane_state_file(monkeypatch):
@@ -205,21 +205,21 @@ def test_config_set_lanes_split_and_overrides(saved_config, monkeypatch, capsys)
                       "lane2.maxloss=1.5", "lane3.mult=3", "lane3.sdloss=4:1"])
     assert rc == 0
     lanes = _raw(saved_config)["lanes"]
-    assert lanes["count"] == 3 and lanes["split"] == "budget"
-    assert lanes["overrides"]["2"] == {"max_loss": 1.5}
-    ov3 = lanes["overrides"]["3"]
+    assert cg.lanes_count(_raw(saved_config)) == 3 and lanes["split"] == "budget"
+    assert lanes["items"]["2"]["overrides"] == {"max_loss": 1.5}
+    ov3 = lanes["items"]["3"]["overrides"]
     assert ov3["multiplier"] == 3.0 and ov3["streak_delay_loss"] == "4:1"
     assert kills == [(4242, signal.SIGHUP)]            # only the touched running lane
-    assert "--daemon --lane K" in capsys.readouterr().out
+    assert "Budget shares update when each lane restarts" in " ".join(capsys.readouterr().out.split())
     assert _raw(saved_config)["max_loss"] is None      # base config unchanged
 
     assert _config_set(["lane2.maxloss=default"]) == 0
-    assert "2" not in _raw(saved_config)["lanes"]["overrides"]
+    assert _raw(saved_config)["lanes"]["items"]["2"]["overrides"] == {}
 
 
 def test_config_set_same_as_base_still_pins_override(saved_config):
     assert _config_set(["lane2.mult=2"]) == 0
-    assert _raw(saved_config)["lanes"]["overrides"]["2"] == {"multiplier": 2.0}
+    assert _raw(saved_config)["lanes"]["items"]["2"]["overrides"] == {"multiplier": 2.0}
 
 
 @pytest.mark.parametrize("key", list(FORBIDDEN) + ["purgedays", "dbmode"])
@@ -230,7 +230,7 @@ def test_config_set_forbidden_lane_key_exits_2(saved_config, key):
 
 
 @pytest.mark.parametrize("pairs", [["lanes=0"], ["lanes=11"], ["lanes=x"],
-                                   ["lane1.maxloss=1"], ["lane11.maxloss=1"],
+                                   ["lane1.maxloss=1"], ["lane100.maxloss=1"],
                                    ["lane_split=half"], ["lane2.lane_split=bet"],
                                    ["lane2.maxloss=abc"], ["lane2.nope=1"]])
 def test_config_set_lane_syntax_refused(saved_config, pairs):
@@ -240,6 +240,7 @@ def test_config_set_lane_syntax_refused(saved_config, pairs):
 
 
 def test_config_set_base_signals_every_running_lane(saved_config, monkeypatch):
+    _write_lanes(saved_config, count=5)
     Path(cg.PID_PATH).write_text("100")
     Path(cg.lane_path(cg.PID_PATH, 2)).write_text("200")
     Path(cg.lane_path(cg.PID_PATH, 5)).write_text("500")
@@ -248,7 +249,7 @@ def test_config_set_base_signals_every_running_lane(saved_config, monkeypatch):
     assert _config_set(["maxloss=5"]) == 0
     assert [p for p, _ in kills] == [100, 200, 500]
     assert _raw(saved_config)["max_loss"] == 5.0
-    assert "lanes" not in _raw(saved_config)
+    assert _raw(saved_config)["lanes"] == {"count": 5}   # the base edit leaves lanes alone
 
 
 def test_config_show_prints_lanes(saved_config, capsys, monkeypatch):
@@ -419,6 +420,7 @@ def test_lane_one_does_not_stagger(cli_state, monkeypatch, sleeps):
 
 def test_lanes_status_table(monkeypatch, capsys):
     monkeypatch.setattr(cg.console, "width", 160)
+    Path(cg.CONFIG_PATH).write_text(json.dumps({"lanes": {"count": 3}}))
     Path(cg.STATE_PATH).write_text(json.dumps(
         {"pid": os.getpid(), "session_id": 1, "profit": 0.5, "bets_per_second": 2.0,
          "uptime_sec": 60, "run_uptime_sec": 120, "lane_equity": None}))
@@ -554,7 +556,7 @@ def test_two_lanes_in_threads_share_account(monkeypatch):
     m2 = _load_lane_module("cryptogames_lane_b", monkeypatch)
     try:
         s1 = _setup_lane(m1, 1, c1, monkeypatch, max_bets=5)
-        # lane 2: Martingale 1.0 x2 on a 5.0 share — after two losses equity
+        # lane 2: Martingale 1.0 x2 on a 5.0 share; after two losses equity
         # is 2.0 and the next bet 4.0 → budget stop; recurring must not restart.
         s2 = _setup_lane(m2, 2, c2, monkeypatch, strategy="Martingale", strategy_key="2",
                          base_bet=1.0, current_bet=1.0, loss_mult=2.0, recurring=True,
@@ -578,7 +580,7 @@ def test_two_lanes_in_threads_share_account(monkeypatch):
     assert list(c2.script) == ["win", "win"]                       # stopped, no restart
     assert account["balance"] == pytest.approx(10.0 + c1.profit + c2.profit)
 
-    # L7: each lane rotates its own ClientSeed — a fresh seed on every bet, and
+    # Each lane rotates its own ClientSeed: a fresh seed on every bet, and
     # no seed shared between the lanes.
     seeds1 = [b["seed"] for b in c1.bets]
     seeds2 = [b["seed"] for b in c2.bets]

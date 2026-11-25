@@ -52,6 +52,7 @@ def _sandbox(tmp_path, monkeypatch, sleeps):
         monkeypatch.setattr(cg, name, str(tmp_path / f"cli_{name.lower()}"))
     monkeypatch.setattr(tg_database, "DATA_DIR", str(tmp_path / "tg"))
     monkeypatch.setattr(cg, "state", cg.BotState())
+    monkeypatch.setattr(cg, "_log_tag", cg._log_tag)
 
     def _no_live(*a, **k):
         raise AssertionError("live HTTP request from a test (patch cg._http_session)")

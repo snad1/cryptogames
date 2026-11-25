@@ -96,7 +96,10 @@ cgctl status            # Check running session status
 cgctl stats             # Show all-time session statistics (--since/--until DATE, --lane K)
 cgctl analytics         # Aggregates: by game, strategy, lane, top 5 best / worst
 cgctl restart               # Restart the bot (every lane)
-cgctl lanes [N] [--split none|budget|bet|both]  # Show or set parallel lanes (1-10)
+cgctl lanes [N] [--split none|budget|bet|both] [--max N]  # Show or set parallel lanes; only the difference starts or stops
+cgctl lane add NAME [--from K] | remove K | rename K NAME  # Change one lane; the others keep betting
+cgctl start|stop|restart K  # One lane alone (lane 1 is the cryptogames service)
+cgctl pause|resume|reload [K|all]  # Pause or resume betting, or reload the saved config (default: every lane)
 cgctl logs                  # Stream live logs
 cgctl logs-full             # Show last 200 log lines
 cgctl diagnose              # Bottleneck analysis of the running session
