@@ -5,9 +5,22 @@ import logging
 
 from shared.tg.redact import RedactingFormatter
 
+TG_KEY_ID = "telegram"
+
+
+def bot_token() -> str:
+    """The bot token from the host key vault, else CRYPTOGAMES_TG_TOKEN; never logged."""
+    try:
+        from shared.core.vault import vault_secret
+    except ImportError:
+        return os.environ.get("CRYPTOGAMES_TG_TOKEN", "")
+    token = vault_secret("cryptogames", TG_KEY_ID, "telegram", log=logging.getLogger("cryptogames"))
+    return token or os.environ.get("CRYPTOGAMES_TG_TOKEN", "")
+
+
 # ── Environment ──────────────────────────────────────────
 APP_ENV    = os.environ.get("APP_ENV", "production")
-BOT_TOKEN  = os.environ.get("CRYPTOGAMES_TG_TOKEN", "")
+BOT_TOKEN  = bot_token()
 DATA_DIR   = os.environ.get("CRYPTOGAMES_TG_DATA", os.path.expanduser("~/.cryptogames_tg"))
 API_BASE   = os.environ.get("CRYPTOGAMES_API_BASE", "https://api.crypto.games")
 WEB_URL    = os.environ.get("CRYPTOGAMES_WEB_URL", "")          # e.g. http://IP:8003

@@ -53,6 +53,8 @@ def _sandbox(tmp_path, monkeypatch, sleeps):
     monkeypatch.setattr(tg_database, "DATA_DIR", str(tmp_path / "tg"))
     monkeypatch.setattr(cg, "state", cg.BotState())
     monkeypatch.setattr(cg, "_log_tag", cg._log_tag)
+    monkeypatch.setenv("CASINO_VAULT_DIR", str(tmp_path / "vault"))
+    monkeypatch.setenv("CASINO_VAULT_KEY_FILE", str(tmp_path / "agent" / "vault.key"))
 
     def _no_live(*a, **k):
         raise AssertionError("live HTTP request from a test (patch cg._http_session)")

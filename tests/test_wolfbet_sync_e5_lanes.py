@@ -168,7 +168,7 @@ def test_load_config_applies_lane_overrides(saved_config):
     assert s.lanes_count == 3
     assert s.max_loss == 1.5 and s.multiplier == 3.0
     assert s.streak_delay_loss == (3, 2.5)
-    assert s.currency == "doge" and s.proxy is None   # forbidden keys ignored
+    assert s.currency == "btc" and s.proxy == "socks5://x:1"   # a lane may bet from its own account
     s1 = _fresh_load(1)
     assert s1.max_loss is None and s1.multiplier == 2.0
 
@@ -302,7 +302,7 @@ def test_split_bet_save_config_writes_full_bet(saved_config):
 
 
 def test_split_basebet_pct_divided(cli_state):
-    s = cli_state(basebet_pct=0.01, current_balance=10.0, lanes_count=4, lane_split="bet")
+    s = cli_state(basebet_pct=0.01, current_balance=10.0, lanes_count=4, split_lanes=4, lane_split="bet")
     assert cg._apply_basebet_pct()
     assert s.base_bet == pytest.approx(0.025)
 
@@ -319,13 +319,13 @@ def test_split_live_reload_no_spurious_base_bet_warning(saved_config, caplog):
 
 def test_init_lane_budget():
     s = cg.state
-    s.current_balance, s.lanes_count, s.lane_split = 9.0, 3, "budget"
+    s.current_balance, s.lanes_count, s.split_lanes, s.lane_split = 9.0, 3, 3, "budget"
     cg._init_lane_budget()
     assert s.lane_share == pytest.approx(3.0)
     s.lane_split = "none"
     cg._init_lane_budget()
     assert s.lane_share is None
-    s.lanes_count, s.lane_split = 1, "both"
+    s.lanes_count, s.split_lanes, s.lane_split = 1, 1, "both"
     cg._init_lane_budget()
     assert s.lane_share is None
 
@@ -360,7 +360,7 @@ def test_risky_config_uses_lane_share_only_with_budget():
     s = cg.state
     s.strategy_key, s.loss_mult, s.base_bet = "2", 2.0, 1.0
     s.streak_reset_losses, s.max_loss = 3, None
-    s.current_balance, s.lanes_count = 64.0, 4
+    s.current_balance, s.lanes_count, s.split_lanes = 64.0, 4, 4
 
     def chain():
         return next(w for w in cg._check_risky_config() if w.startswith("Streak reset"))
@@ -372,7 +372,7 @@ def test_risky_config_uses_lane_share_only_with_budget():
 
 
 def test_state_file_has_lane_fields(cli_state):
-    s = cli_state(lane=2, lanes_count=2, lane_split="budget", lane_share=5.0)
+    s = cli_state(lane=2, lanes_count=2, split_lanes=2, lane_split="budget", lane_share=5.0)
     s.lane_run_profit = 0.5
     cg._save_state_file()
     d = _raw(cg.STATE_PATH)
@@ -397,7 +397,7 @@ def _stub_start(monkeypatch, sleeps):
 
 
 def test_lane_start_stagger_and_budget(cli_state, monkeypatch, sleeps):
-    cli_state(lanes_count=3, lane_split="budget")
+    cli_state(lanes_count=3, split_lanes=3, lane_split="budget")
     _stub_start(monkeypatch, sleeps)
     monkeypatch.setattr(sys, "argv", ["cryptogames.py", "--daemon", "--lane", "3"])
     with pytest.raises(_Started) as e:
@@ -536,7 +536,7 @@ def _setup_lane(mod, lane, casino, monkeypatch, **kw):
     s.multiplier, s.strategy, s.strategy_key = 2.0, "Flat Bet", "1"
     s.base_bet = s.current_bet = 0.01
     s.db_write_mode = "sync"
-    s.lanes_count, s.lane_split = 2, "budget"
+    s.lanes_count, s.split_lanes, s.lane_split = 2, 2, "budget"
     for k, v in kw.items():
         setattr(s, k, v)
     s.start_balance = s.current_balance = s.highest_balance = s.lowest_balance = casino.balance

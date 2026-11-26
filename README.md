@@ -98,6 +98,7 @@ cgctl analytics         # Aggregates: by game, strategy, lane, top 5 best / wors
 cgctl restart               # Restart the bot (every lane)
 cgctl lanes [N] [--split none|budget|bet|both] [--max N]  # Show or set parallel lanes; only the difference starts or stops
 cgctl lane add NAME [--from K] | remove K | rename K NAME  # Change one lane; the others keep betting
+cgctl key list | add ID [--label L] [--kind key|proxy|telegram] | rotate ID | delete ID  # Host vault: API keys, proxies, the Telegram token (hidden prompt)
 cgctl start|stop|restart K  # One lane alone (lane 1 is the cryptogames service)
 cgctl pause|resume|reload [K|all]  # Pause or resume betting, or reload the saved config (default: every lane)
 cgctl logs                  # Stream live logs
@@ -145,7 +146,7 @@ The Telegram bot provides full betting control from your phone. Each Telegram us
 
 1. Open Telegram, search **@BotFather**, `/newbot`
 2. Choose a name and username, copy the token
-3. On your server: `cgctl tg env` and set `CRYPTOGAMES_TG_TOKEN=<token>`
+3. On your server: `cgctl key add telegram --kind telegram` (hidden prompt; the host vault keeps it), or `cgctl tg env` and set `CRYPTOGAMES_TG_TOKEN=<token>`
 4. `cgctl tg start`
 5. Open your bot in Telegram and `/start`
 
@@ -192,7 +193,7 @@ The Telegram bot provides full betting control from your phone. Each Telegram us
 
 | Variable | Default | Description |
 |---|---|---|
-| `CRYPTOGAMES_API_KEY` | *(none)* | API key from crypto.games settings |
+| `CRYPTOGAMES_API_KEY` | *(none)* | API key from crypto.games settings. Read once: lane 1 moves it into the host vault on start; then remove it from `~/cryptogames-bot/.env` |
 | `CRYPTOGAMES_API_BASE` | `https://api.crypto.games` | API base URL |
 | `CRYPTOGAMES_DB_PATH` | `~/.cryptogames_autobot.db` | SQLite database path |
 | `CRYPTOGAMES_CONFIG_PATH` | `~/.cryptogames_autobot.json` | Saved config path |
