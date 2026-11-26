@@ -95,7 +95,7 @@ LOG_DIR      = os.environ.get("CRYPTOGAMES_LOG_DIR",      os.path.expanduser("~/
 # A lane's restart or removal request for its next session end (.laneK for lanes 2+).
 DRAIN_PATH   = os.environ.get("CRYPTOGAMES_DRAIN_PATH", os.path.expanduser("~/.cryptogames_autobot.drain"))
 CTL_PATH     = os.environ.get("CRYPTOGAMES_CGCTL", os.path.expanduser("~/.local/bin/cgctl"))
-VERSION      = "1.16.0"
+VERSION      = "1.17.0"
 APP_ENV      = os.environ.get("APP_ENV", "production")
 
 # ── Daily rotating logger ──
@@ -4370,11 +4370,13 @@ def cmd_monitor():
 #  --status / --stop / --list-presets / --stats / --last-bets / --session-bets
 # ══════════════════════════════════════════════════════════
 def _read_lane_states() -> list:
-    """[(lane, state-dict | None, alive)] for registry lanes that have a state file."""
+    """[(lane, state-dict | None, alive)] for every registry lane; a lane that never ran (no
+    state file) is listed as not alive, so a lane that should bet but doesn't is still seen."""
     out = []
     for k in lane_ids(_read_config_raw() or {}):
         path = lane_path(_BASE_STATE_PATH, k)
         if not os.path.exists(path):
+            out.append((k, None, False))
             continue
         try:
             with open(path) as f:
@@ -4411,7 +4413,8 @@ def cmd_lanes_status():
     for k, d, alive in rows:
         lead = (str(k), escape(names.get(k, ""))) if names else (str(k),)
         if d is None:
-            t.add_row(*lead, "[red]unreadable[/]", *["-"] * 7)
+            never = not os.path.exists(lane_path(_BASE_STATE_PATH, k))
+            t.add_row(*lead, "[red]NOT RUNNING[/]" if never else "[red]unreadable[/]", *["-"] * 7)
             continue
         p = float(d.get("profit", 0) or 0)
         bps = float(d.get("bets_per_second", 0) or 0) if alive else 0.0

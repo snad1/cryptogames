@@ -97,6 +97,7 @@ cgctl stats             # Show all-time session statistics (--since/--until DATE
 cgctl analytics         # Aggregates: by game, strategy, lane, top 5 best / worst
 cgctl restart               # Restart the bot (every lane)
 cgctl restart K --at-boundary | --cancel-boundary  # Restart lane K when its session ends
+cgctl restart --rolling                            # Restart every running lane at its own session end; starting or restarting lane 1 also starts the enabled lanes that are not running
 cgctl lanes [N] [--split none|budget|bet|both] [--max N]  # Show or set parallel lanes; only the difference starts or stops
 cgctl lane add NAME [--from K] | remove K [--after-session] | rename K NAME  # Change one lane; the others keep betting
 cgctl key list | add ID [--label L] [--kind key|proxy|telegram] | rotate ID | delete ID  # Host vault: API keys, proxies, the Telegram token (hidden prompt)
