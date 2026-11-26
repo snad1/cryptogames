@@ -96,8 +96,9 @@ cgctl status            # Check running session status
 cgctl stats             # Show all-time session statistics (--since/--until DATE, --lane K)
 cgctl analytics         # Aggregates: by game, strategy, lane, top 5 best / worst
 cgctl restart               # Restart the bot (every lane)
+cgctl restart K --at-boundary | --cancel-boundary  # Restart lane K when its session ends
 cgctl lanes [N] [--split none|budget|bet|both] [--max N]  # Show or set parallel lanes; only the difference starts or stops
-cgctl lane add NAME [--from K] | remove K | rename K NAME  # Change one lane; the others keep betting
+cgctl lane add NAME [--from K] | remove K [--after-session] | rename K NAME  # Change one lane; the others keep betting
 cgctl key list | add ID [--label L] [--kind key|proxy|telegram] | rotate ID | delete ID  # Host vault: API keys, proxies, the Telegram token (hidden prompt)
 cgctl start|stop|restart K  # One lane alone (lane 1 is the cryptogames service)
 cgctl pause|resume|reload [K|all]  # Pause or resume betting, or reload the saved config (default: every lane)
@@ -117,7 +118,8 @@ cgctl cleanup [DAYS]        # Purge bet rows of old sessions (default: purge_day
 cgctl reset [--yes]         # Archive the stats DB and start fresh (never deletes)
 cgctl archives              # List archived stats DBs
 cgctl run-reset [--yes]     # New run total for the run-wide profit increment
-cgctl update                # Pull, reinstall requirements, restart what was running
+cgctl update                # Pull and reinstall; each lane restarts on the new code at its session end
+cgctl update --critical     # Same, but restart every lane now
 cgctl refresh               # Reinstall cgctl from the repo copy in this folder
 cgctl version               # Bot and cgctl versions
 
