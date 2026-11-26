@@ -1,4 +1,4 @@
-"""WolfBet sync E4-S4: cryptogames CLI stats and analytics (dice only).
+"""cryptogames CLI stats and analytics (dice only).
 
 Mirrors WolfBet v2.30.9 / v2.31.0 (date windows), v2.33.0 (time-of-day
 window), v2.33.1 (wins / losses per session), v2.34.0 (time span, bet time,
@@ -279,7 +279,7 @@ def test_main_dispatches_stats_lane(monkeypatch):
     monkeypatch.setattr(go, "cmd_stats", lambda **kw: seen.update(kw))
     monkeypatch.setattr(sys, "argv", ["cryptogames.py", "--stats", "--lane", "3"])
     go.main()
-    assert seen == {"since": None, "until": None, "lane": 3}
+    assert seen == {"since": None, "until": None, "lane": 3, "as_json": False, "before": None}
 
 
 def test_stats_and_analytics_are_exclusive(monkeypatch):

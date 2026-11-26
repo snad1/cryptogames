@@ -49,7 +49,7 @@ def _mk_engine(db):
 
 # ── VERSION ───────────────────────────────────────────────
 def test_cli_version():
-    assert cg.VERSION == "1.18.0"
+    assert cg.VERSION == "1.19.0"
 
 
 def test_tg_version():
@@ -311,7 +311,7 @@ def test_argparse_has_since_until():
     assert 'parser.add_argument("--since"' in src
     assert 'parser.add_argument("--until"' in src
     assert 'group.add_argument("--since"' not in src
-    assert 'cmd_stats(since=args.since, until=args.until, lane=args.lane)' in src
+    assert 'cmd_stats(since=args.since, until=args.until, lane=args.lane, as_json=args.json,' in src
 
 
 # ── Date-range filter (TG /analytics SINCE UNTIL) ──────────
